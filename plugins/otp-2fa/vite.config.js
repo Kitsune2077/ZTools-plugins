@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -10,12 +11,17 @@ export default defineConfig({
       transformIndexHtml(html) {
         return html.replace(/ crossorigin/g, '')
       }
-    }
+    },
+    viteStaticCopy({
+      targets: [
+        { src: 'README.md', dest: '' },
+        { src: 'screenshot.png', dest: '' }
+      ]
+    })
   ],
   base: './',
   build: {
-    // 将所有资源平铺在根目录，避免子目录寻址错误
-    assetsDir: '',
+    assetsDir: 'assets',
     modulePreload: {
       polyfill: false
     },

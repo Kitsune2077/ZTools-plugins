@@ -24,6 +24,7 @@ export function useAccounts() {
           if (configRes.salt) masterSalt.value = configRes.salt
           config.value.timerStyle = configRes.timerStyle || 'bar'
           config.value.nextPreview = !!configRes.nextPreview
+          config.value.pinyinScheme = configRes.pinyinScheme || 'quanpin'
         }
         
         if (masterSalt.value && !masterKey.value) {

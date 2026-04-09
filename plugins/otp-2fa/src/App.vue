@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { getOTP, base32tohex } from './utils/otp'
 import { useAuth } from './composables/useAuth'
 import { useAccounts } from './composables/useAccounts'
@@ -15,7 +15,8 @@ import EditModal from './components/Modals/EditModal.vue'
 import ConfirmModal from './components/Modals/ConfirmModal.vue'
 import ImportDataModal from './components/Modals/ImportDataModal.vue'
 import ChangePasswordModal from './components/Modals/ChangePasswordModal.vue'
-import { STORAGE_KEY, CONFIG_KEY } from './constants'
+import { STORAGE_KEY, CONFIG_KEY, DEFAULT_PINYIN_SCHEME } from './constants'
+import { matchesPinyin, type PinyinScheme } from './utils/pinyin'
 
 // --- Composables Initialization ---
 const {
@@ -44,12 +45,26 @@ const {
 } = useDataManagement()
 
 // --- Local UI State ---
-const config = ref({ timerStyle: 'bar', nextPreview: false })
+const config = ref({ timerStyle: 'bar', nextPreview: false, pinyinScheme: DEFAULT_PINYIN_SCHEME })
+const searchQuery = ref('')
+const filteredAccounts = computed(() => {
+  const q = searchQuery.value.trim().toLowerCase()
+  if (!q) return accounts.value
+  return accounts.value.filter(acc => matchesPinyin(acc.name, q, (config.value.pinyinScheme || DEFAULT_PINYIN_SCHEME) as PinyinScheme))
+})
+
+const setupSubInput = () => {
+  const z = (window as any).ztools
+  z?.setSubInput?.((data: { text: string }) => {
+    searchQuery.value = data.text || ''
+  }, '搜索账号...', false)
+}
 const showModal = ref(false)
 const showNextSelectMenu = ref(false)
 const showAbout = ref(false)
 const showSettings = ref(false)
 const showSelectMenu = ref(false)
+const showPinyinSelectMenu = ref(false)
 
 const modalTitle = ref('')
 const modalForm = ref({
@@ -116,6 +131,7 @@ const initialize = async () => {
   })
   startTicker(accounts)
   window.addEventListener('click', hideContextMenu)
+  setupSubInput()
 
   let killTimer: any = null
 
@@ -123,6 +139,9 @@ const initialize = async () => {
     z.onPluginEnter(async () => {
       // 中途打开，取消待执行的 kill
       if (killTimer) { clearTimeout(killTimer); killTimer = null }
+
+      searchQuery.value = ''
+      z?.setSubInputValue?.('')
 
       await loadAccounts(masterSalt, masterKey, config, {
         onAutoUnlock: tryAutoUnlock,
@@ -486,9 +505,12 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
       <div v-if="accounts.length === 0" class="empty-tip-container">
         <div class="empty-tip">暂无账号</div>
       </div>
+      <div v-else-if="filteredAccounts.length === 0" class="empty-tip-container">
+        <div class="empty-tip">无匹配结果</div>
+      </div>
       <transition-group name="list" tag="div" class="list-container">
         <AccountCard 
-          v-for="(acc, index) in accounts" 
+          v-for="(acc, index) in filteredAccounts" 
           :key="acc.id" 
           :acc="acc" 
           :index="index"
@@ -516,6 +538,7 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
       v-model:show="showSettings"
       v-model:showSelectMenu="showSelectMenu"
       v-model:showNextSelectMenu="showNextSelectMenu"
+      v-model:showPinyinSelectMenu="showPinyinSelectMenu"
       :config="config"
       @save-config="saveConfig(config)"
       @reset-database="handleResetDatabase"
@@ -714,6 +737,7 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 16px;
+  position: relative;
 }
 
 .card {
@@ -1226,7 +1250,27 @@ onUnmounted(() => { stopTicker(); window.removeEventListener('click', hideContex
 }
 
 .list-move {
-  transition: transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.list-enter-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.list-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  position: absolute;
+  pointer-events: none;
+}
+
+.list-enter-from {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+.list-leave-to {
+  opacity: 0;
+  transform: scale(0.96) translateY(-6px);
 }
 
 .fade-enter-active, .fade-leave-active { transition: opacity 0.2s; }
