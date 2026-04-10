@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 import { STORAGE_KEY, CONFIG_KEY } from '../constants'
-import { encryptSecret, decryptSecret, deriveKey } from '../utils/crypto'
+import { encryptSecret, decryptSecret, deriveKey, exportKey, hashVerifier } from '../utils/crypto'
 
 export interface ExportData {
   version: string
@@ -73,7 +73,8 @@ export function useDataManagement() {
     accounts: any[],
     masterSalt: any,
     masterKey: any,
-    config: any
+    config: any,
+    getHardwareKey?: () => Promise<CryptoKey>
   ) => {
     const z = (window as any).ztools
 
@@ -160,17 +161,26 @@ export function useDataManagement() {
       const decryptedAccounts = JSON.parse(JSON.stringify(importedData.accounts))
       for (const acc of decryptedAccounts) {
         if (acc.encrypted && acc.secret.includes(':')) {
-          try {
-            acc.secret = await decryptSecret(acc.secret, derivedKey)
-            acc.encrypted = false
-          } catch (e) {
-            console.error('account decrypt failed for', acc.id, e)
-          }
+          acc.secret = await decryptSecret(acc.secret, derivedKey)
+          acc.encrypted = false
         }
       }
 
       accounts.length = 0
       accounts.push(...decryptedAccounts)
+
+      // 生成 verifier 和 hardwareEncryptedKey，确保重启后验证流程正常
+      const rawKey = await exportKey(derivedKey)
+      const verifier = await hashVerifier(rawKey)
+      let hwEncrypted: string | undefined
+      if (getHardwareKey) {
+        try {
+          const hwKey = await getHardwareKey()
+          hwEncrypted = await encryptSecret(rawKey, hwKey)
+        } catch (e) {
+          console.error('Hardware key encryption failed', e)
+        }
+      }
 
       let conf = null
       try { conf = z.db.get(CONFIG_KEY) } catch(e){}
@@ -179,8 +189,10 @@ export function useDataManagement() {
         _id: CONFIG_KEY,
         _rev: conf ? conf._rev : undefined,
         salt: saltBase64,
+        verifier: verifier,
+        ...(hwEncrypted ? { hardwareEncryptedKey: hwEncrypted } : {}),
         timerStyle: config.timerStyle || 'bar',
-        nextPreview: config.nextPreview || false
+        nextPreview: config.nextPreview ?? true
       })
 
       // 数据库存储加密后的原始数据

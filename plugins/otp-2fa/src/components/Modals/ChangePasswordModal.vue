@@ -63,7 +63,7 @@ const handleCancel = () => {
                 ref="currentInput"
                 :type="showCurrent ? 'text' : 'password'"
                 v-model="currentPassword"
-                placeholder="XXX"
+                placeholder="输入当前主密码"
                 @keyup.enter="handleSubmit"
                 spellcheck="false"
               />
@@ -83,7 +83,7 @@ const handleCancel = () => {
               <input
                 :type="showNew ? 'text' : 'password'"
                 v-model="newPassword"
-                placeholder="XXX"
+                placeholder="请输入至少 4 位密码"
                 @keyup.enter="handleSubmit"
                 spellcheck="false"
               />
@@ -103,7 +103,7 @@ const handleCancel = () => {
               <input
                 :type="showConfirm ? 'text' : 'password'"
                 v-model="confirmPassword"
-                placeholder="XXX"
+                placeholder="请再次输入密码"
                 @keyup.enter="handleSubmit"
                 spellcheck="false"
               />

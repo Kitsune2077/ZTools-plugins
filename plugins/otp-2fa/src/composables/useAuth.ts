@@ -187,12 +187,8 @@ export function useAuth() {
           acc.secret = await encryptSecret(acc.secret, newKey)
           acc.encrypted = true
         } else if (acc.secret.includes(':')) {
-          try {
-            const plain = await decryptSecret(acc.secret, testKey)
-            acc.secret = await encryptSecret(plain, newKey)
-          } catch (e) {
-            console.error('Re-encrypt failed for', acc.id, e)
-          }
+          const plain = await decryptSecret(acc.secret, testKey)
+          acc.secret = await encryptSecret(plain, newKey)
         }
       }
 

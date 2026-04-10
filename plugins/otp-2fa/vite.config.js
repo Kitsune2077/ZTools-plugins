@@ -15,7 +15,8 @@ export default defineConfig({
     viteStaticCopy({
       targets: [
         { src: 'README.md', dest: '' },
-        { src: 'screenshot.png', dest: '' }
+        { src: 'screenshot1.png', dest: '' },
+        { src: 'screenshot2.png', dest: '' }
       ]
     })
   ],

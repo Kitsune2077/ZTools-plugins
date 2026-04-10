@@ -7,6 +7,7 @@ const props = defineProps<{
   modelValue: any,
   activeDropdown: string | null,
   nameError: boolean,
+  nameWarn: boolean,
   secretError: boolean,
   secretErrorMsg: string,
   showSecret: boolean
@@ -60,6 +61,7 @@ const handlePeriodClick = (p: number) => {
             <label>
               <span>账号名称</span>
               <span v-if="nameError" class="label-error">请输入账号名称</span>
+              <span v-else-if="nameWarn" class="label-warn">已存在同名账号，再次确认保存</span>
             </label>
             <input type="text" v-model="modelValue.name" placeholder="例如: Github" ref="nameInput" spellcheck="false">
           </div>

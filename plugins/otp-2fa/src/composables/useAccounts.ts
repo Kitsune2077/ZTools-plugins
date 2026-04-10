@@ -23,7 +23,7 @@ export function useAccounts() {
         if (configRes) {
           if (configRes.salt) masterSalt.value = configRes.salt
           config.value.timerStyle = configRes.timerStyle || 'bar'
-          config.value.nextPreview = !!configRes.nextPreview
+          config.value.nextPreview = configRes.nextPreview ?? true
           config.value.pinyinScheme = configRes.pinyinScheme || 'quanpin'
         }
         
@@ -42,6 +42,8 @@ export function useAccounts() {
       }
     } catch (e) {
       console.error('Load Error:', e)
+      const z2 = (window as any).ztools
+      z2?.showNotification?.('数据加载失败，账户数据可能已损坏')
     }
     hooks.onTokensUpdate()
   }
@@ -50,12 +52,8 @@ export function useAccounts() {
     if (!masterKey) return
     for (const acc of accounts.value) {
       if (acc.encrypted && acc.secret.includes(':')) {
-        try {
-          acc.secret = await decryptSecret(acc.secret, masterKey)
-          acc.encrypted = false
-        } catch (e) {
-          console.error('Decrypt failed for', acc.id, e)
-        }
+        acc.secret = await decryptSecret(acc.secret, masterKey)
+        acc.encrypted = false
       }
     }
   }
