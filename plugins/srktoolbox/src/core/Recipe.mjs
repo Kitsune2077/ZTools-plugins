@@ -6,11 +6,7 @@
  * Modified by Raka-loah@github
  */
 
-<<<<<<< HEAD
 import OperationConfig from "./config/OperationConfig.json" with {type: "json"};
-=======
-import OperationConfig from "./config/OperationConfig.json" assert {type: "json"};
->>>>>>> 334f3fc (first commit)
 import OperationError from "./errors/OperationError.mjs";
 import Operation from "./Operation.mjs";
 import DishError from "./errors/DishError.mjs";

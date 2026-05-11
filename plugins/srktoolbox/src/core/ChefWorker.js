@@ -7,11 +7,7 @@
  */
 
 import Chef from "./Chef.mjs";
-<<<<<<< HEAD
 import OperationConfig from "./config/OperationConfig.json" with {type: "json"};
-=======
-import OperationConfig from "./config/OperationConfig.json" assert {type: "json"};
->>>>>>> 334f3fc (first commit)
 import OpModules from "./config/modules/OpModules.mjs";
 import loglevelMessagePrefix from "loglevel-message-prefix";
 
