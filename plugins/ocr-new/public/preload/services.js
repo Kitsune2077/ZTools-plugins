@@ -76,13 +76,6 @@ const hmac = (key, content, encoding) => crypto.createHmac('sha256', key).update
 
 const getServerDir = () => path.resolve(__dirname, '..', 'local-ocr-server')
 
-const getVenvPython = () => {
-  const serverDir = getServerDir()
-  return process.platform === 'win32'
-    ? path.join(serverDir, '.venv', 'Scripts', 'python.exe')
-    : path.join(serverDir, '.venv', 'bin', 'python')
-}
-
 const getPidFile = () => path.join(getServerDir(), '.server.pid')
 
 const getBundledRuntime = () => {
@@ -98,63 +91,6 @@ const getBundledRuntime = () => {
     executablePath,
     cwd: path.dirname(executablePath)
   }
-}
-
-const getSystemPythonCommands = () => process.platform === 'win32'
-  ? [['py', ['-3']], ['python', []], ['python3', []]]
-  : [['python3', []], ['python', []]]
-
-const runCommand = (command, args, options = {}) => {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      shell: false,
-      windowsHide: true
-    })
-    let output = ''
-    child.stdout.on('data', (data) => {
-      output += data.toString()
-    })
-    child.stderr.on('data', (data) => {
-      output += data.toString()
-    })
-    child.on('error', reject)
-    child.on('close', (code) => {
-      if (code === 0) {
-        resolve(output)
-      } else {
-        reject(new Error(output || `${command} exited with ${code}`))
-      }
-    })
-  })
-}
-
-const runFirstAvailableCommand = async (candidates, args, options = {}) => {
-  const errors = []
-  for (const [command, commandArgs] of candidates) {
-    try {
-      return await runCommand(command, [...commandArgs, ...args], options)
-    } catch (error) {
-      errors.push(`${command}: ${error?.message || error}`)
-    }
-  }
-  throw new Error(`未找到可用 Python。请安装 Python 3 后重试。\n${errors.join('\n')}`)
-}
-
-const getSystemPythonStatus = async () => {
-  for (const [command, commandArgs] of getSystemPythonCommands()) {
-    try {
-      const version = await runCommand(command, [...commandArgs, '--version'])
-      return {
-        available: true,
-        command: [command, ...commandArgs].join(' '),
-        version: version.trim()
-      }
-    } catch (_error) {
-      // 尝试下一个 Python 命令
-    }
-  }
-  return { available: false, command: '', version: '' }
 }
 
 const startDetached = (command, args, cwd) => {
@@ -363,42 +299,20 @@ window.services = {
   async getLocalOcrStatus(options = {}) {
     const bundledRuntime = getBundledRuntime()
     const runtimeBundled = !!bundledRuntime
-    const installed = runtimeBundled || fs.existsSync(getVenvPython())
-    const pythonStatus = runtimeBundled
-      ? { available: true, command: '内置运行时', version: '内置 RapidOCR 运行时' }
-      : await getSystemPythonStatus()
     try {
       const endpoint = normalizeLocalOcrEndpoint(options.endpoint)
       const healthUrl = endpoint.endsWith('/ocr') ? endpoint.slice(0, -4) + '/health' : endpoint.replace(/\/+$/, '') + '/health'
       const response = await requestWithTimeout(healthUrl, { method: 'GET' }, 2000)
       const result = await response.json().catch(() => ({}))
-      return { running: !!result.ok, installed, runtimeBundled, pythonAvailable: pythonStatus.available, pythonVersion: pythonStatus.version, pythonCommand: pythonStatus.command }
+      return { running: !!result.ok, runtimeBundled }
     } catch (_error) {
-      return { running: false, installed, runtimeBundled, pythonAvailable: pythonStatus.available, pythonVersion: pythonStatus.version, pythonCommand: pythonStatus.command }
+      return { running: false, runtimeBundled }
     }
-  },
-  async installLocalOcr() {
-    if (getBundledRuntime()) {
-      return { ok: true, output: '插件已包含内置 RapidOCR 运行时，无需安装 Python 依赖。' }
-    }
-    const serverDir = getServerDir()
-    if (!fs.existsSync(serverDir)) throw new Error(`未找到本地 OCR 服务目录：${serverDir}`)
-    let output = ''
-    output += await runFirstAvailableCommand(getSystemPythonCommands(), ['-m', 'venv', '.venv'], { cwd: serverDir })
-    output += await runCommand(getVenvPython(), ['-m', 'pip', 'install', '-r', 'requirements.txt'], { cwd: serverDir })
-    return { ok: true, output }
   },
   async startLocalOcr() {
     const bundledRuntime = getBundledRuntime()
-    if (bundledRuntime) {
-      const pid = startDetached(bundledRuntime.executablePath, [], bundledRuntime.cwd)
-      if (pid) fs.writeFileSync(getPidFile(), String(pid), { encoding: 'utf-8' })
-      return { ok: true }
-    }
-    const serverDir = getServerDir()
-    const pythonPath = getVenvPython()
-    if (!fs.existsSync(pythonPath)) throw new Error('本地 OCR 依赖未安装，请先一键安装')
-    const pid = startDetached(pythonPath, ['server.py'], serverDir)
+    if (!bundledRuntime) throw new Error(`当前平台 (${process.platform}) 未集成 RapidOCR 运行时`)
+    const pid = startDetached(bundledRuntime.executablePath, [], bundledRuntime.cwd)
     if (pid) fs.writeFileSync(getPidFile(), String(pid), { encoding: 'utf-8' })
     return { ok: true }
   },

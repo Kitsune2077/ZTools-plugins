@@ -93,8 +93,6 @@ const localServicePolicy = ref<LocalServicePolicy>(
 const localOcrRunning = ref(false)
 const localOcrInstalled = ref(false)
 const localRuntimeBundled = ref(false)
-const localPythonAvailable = ref(false)
-const localPythonVersion = ref('')
 const localOcrMessage = ref('')
 const localOcrBusy = ref(false)
 
@@ -562,40 +560,13 @@ const handlePriorityChange = (index: number, event: Event) => {
 const refreshLocalOcrStatus = async () => {
   const statusResult = await window.services.getLocalOcrStatus({ endpoint: localOcrEndpoint.value })
   localOcrRunning.value = statusResult.running
-  localOcrInstalled.value = statusResult.installed
   localRuntimeBundled.value = statusResult.runtimeBundled
-  localPythonAvailable.value = statusResult.pythonAvailable
-  localPythonVersion.value = statusResult.pythonVersion || statusResult.pythonCommand
   if (statusResult.running) {
     localOcrMessage.value = '本地 OCR 服务运行中'
   } else if (statusResult.runtimeBundled) {
     localOcrMessage.value = '内置 RapidOCR 运行时已就绪'
-  } else if (!statusResult.installed && !statusResult.pythonAvailable) {
-    localOcrMessage.value = '未检测到 Python 3，请先安装 Python'
   } else {
-    localOcrMessage.value = '本地 OCR 服务未运行'
-  }
-}
-
-const handleInstallLocalOcr = async () => {
-  if (localRuntimeBundled.value) {
-    localOcrMessage.value = '插件已包含内置 RapidOCR 运行时，无需安装'
-    return
-  }
-  if (!localPythonAvailable.value) {
-    localOcrMessage.value = '未检测到 Python 3，请先安装 Python'
-    return
-  }
-  localOcrBusy.value = true
-  localOcrMessage.value = '正在安装本地 OCR 依赖，可能需要几分钟'
-  try {
-    await window.services.installLocalOcr()
-    localOcrMessage.value = '本地 OCR 依赖安装完成'
-    await refreshLocalOcrStatus()
-  } catch (error: any) {
-    localOcrMessage.value = error?.message || '本地 OCR 安装失败'
-  } finally {
-    localOcrBusy.value = false
+    localOcrMessage.value = '当前平台未集成 RapidOCR 运行时'
   }
 }
 
@@ -1015,16 +986,11 @@ onMounted(() => {
         </div>
         <div class="local-status">
           <span :class="{ ok: localOcrRunning }">{{ localOcrMessage || '尚未检测' }}</span>
-          <span v-if="localPythonVersion" class="sub-status">Python：{{ localPythonVersion }}</span>
         </div>
         <div class="local-actions">
-          <button type="button" :disabled="localOcrBusy || localRuntimeBundled || !localPythonAvailable" @click="handleInstallLocalOcr">
-            {{ localRuntimeBundled ? '运行时已内置' : '一键安装' }}
-          </button>
-          <button type="button" :disabled="localOcrBusy || !localOcrInstalled" @click="handleStartLocalOcr">启动服务</button>
+          <button type="button" :disabled="localOcrBusy || !localRuntimeBundled" @click="handleStartLocalOcr">启动服务</button>
           <button type="button" :disabled="localOcrBusy || !localOcrRunning" @click="handleStopLocalOcr">停止服务</button>
           <button type="button" :disabled="localOcrBusy" @click="refreshLocalOcrStatus">刷新状态</button>
-          <button v-if="!localRuntimeBundled" type="button" @click="handleOpenExternal('https://www.python.org/downloads/windows/')">安装 Python</button>
         </div>
       </section>
 
@@ -1088,8 +1054,8 @@ onMounted(() => {
             <span class="inline-code">deepseek-ai/DeepSeek-OCR</span>。
           </p>
           <p>
-            <strong>本地 RapidOCR：</strong>Windows 版本已打包 RapidOCR 运行时，可直接启动本地服务；如果运行时缺失，才需要用 Python 一键安装。
-            不想启动本地服务时，可以使用 OCR.Space / 百度 / 腾讯等云端 OCR。
+            <strong>本地 RapidOCR：</strong>插件已内置 RapidOCR 运行时，无需额外安装，可直接启动本地 OCR 服务。
+             不想启动本地服务时，可以使用 OCR.Space / 百度 / 腾讯等云端 OCR。
           </p>
         </div>
         <button type="button" @click="handleOpenAiModelSettings">打开 AI 模型设置</button>
