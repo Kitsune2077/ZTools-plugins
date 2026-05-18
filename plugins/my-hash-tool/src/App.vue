@@ -67,6 +67,8 @@ const textInput = ref('')
 const inputRepresentsFiles = ref(false)
 const isDragging = ref(false)
 const isHashing = ref(false)
+const cancelRequested = ref(false)
+const isUnmounted = ref(false)
 const copiedKey = ref('')
 const warningFiles = ref<FileInfo[]>([])
 const warningVisible = ref(false)
@@ -128,10 +130,21 @@ function loadSettings() {
   try {
     const saved = window.ztools?.dbStorage?.getItem<Partial<Settings>>(SETTINGS_KEY)
     Object.assign(settings, normalizeSettings(saved))
+    return
   } catch {
+    // dbStorage 不可用时降级到 localStorage
+  }
+
+  try {
     const saved = window.localStorage.getItem(SETTINGS_KEY)
-    if (saved) {
-      Object.assign(settings, normalizeSettings(JSON.parse(saved)))
+    Object.assign(settings, normalizeSettings(saved ? JSON.parse(saved) : null))
+  } catch {
+    // localStorage 内容损坏时显式回退到默认值，避免静默使用陈旧 settings 状态
+    Object.assign(settings, { ...DEFAULT_SETTINGS })
+    try {
+      window.localStorage.removeItem(SETTINGS_KEY)
+    } catch {
+      // ignore
     }
   }
 }
@@ -149,11 +162,14 @@ function saveSettings() {
 
 function normalizeSettings(value?: Partial<Settings> | null): Settings {
   const threshold = Number(value?.largeFileWarningThresholdGB)
+  // 显式区分 "字段缺失" 与 "用户主动清空数组"：仅缺失时才回退默认，避免未来调整默认值时静默覆盖用户配置
   const extraAlgorithms = Array.isArray(value?.extraAlgorithms)
     ? value.extraAlgorithms.filter((algorithm): algorithm is ExtraHashAlgorithm =>
         EXTRA_HASH_ALGORITHMS.includes(algorithm as ExtraHashAlgorithm)
       )
-    : DEFAULT_SETTINGS.extraAlgorithms
+    : value?.extraAlgorithms === undefined
+      ? DEFAULT_SETTINGS.extraAlgorithms
+      : []
 
   return {
     largeFileWarningEnabled:
@@ -161,11 +177,15 @@ function normalizeSettings(value?: Partial<Settings> | null): Settings {
         ? value.largeFileWarningEnabled
         : DEFAULT_SETTINGS.largeFileWarningEnabled,
     largeFileWarningThresholdGB:
+      // 保留两位小数避免持久化浮点漂移（如 0.1 + 0.2 类问题）
       Number.isFinite(threshold) && threshold >= 1 && threshold <= 1024
         ? Number(threshold.toFixed(2))
         : DEFAULT_SETTINGS.largeFileWarningThresholdGB,
     extraAlgorithms: Array.from(new Set(extraAlgorithms)),
-    defaultCase: value?.defaultCase === 'uppercase' ? 'uppercase' : DEFAULT_SETTINGS.defaultCase
+    defaultCase:
+      value?.defaultCase === 'lowercase' || value?.defaultCase === 'uppercase'
+        ? value.defaultCase
+        : DEFAULT_SETTINGS.defaultCase
   }
 }
 
@@ -306,8 +326,17 @@ async function startHashing(files: FileInfo[]) {
   const algorithms = enabledAlgorithms.value
   tasks.value = files.map((file) => createTask(file, algorithms))
   isHashing.value = true
+  cancelRequested.value = false
 
   for (const task of tasks.value) {
+    if (cancelRequested.value) {
+      // 用户请求中断后，剩余任务标记为已取消，跳过实际计算
+      task.status = 'error'
+      task.error = '已取消'
+      task.progress = 0
+      continue
+    }
+
     task.status = 'hashing'
     task.error = ''
     task.progress = 0
@@ -326,7 +355,13 @@ async function startHashing(files: FileInfo[]) {
   }
 
   isHashing.value = false
+  cancelRequested.value = false
   notifyBatchFinished(tasks.value)
+}
+
+function cancelHashing() {
+  if (!isHashing.value) return
+  cancelRequested.value = true
 }
 
 function startTextHashing(text: string) {
@@ -401,7 +436,8 @@ function getStatusText(task: HashTask) {
 }
 
 function applyCase(value: string, displayCase: HashCase) {
-  return displayCase === 'uppercase' ? value.toUpperCase() : value
+  // 显式调用避免依赖 "底层 digest 总返回小写" 的隐式契约
+  return displayCase === 'uppercase' ? value.toUpperCase() : value.toLowerCase()
 }
 
 function getDisplayedHash(task: HashTask, algorithm: HashAlgorithm) {
@@ -613,6 +649,9 @@ function showCompletionToast(message: string, tone: 'neutral' | 'error' = 'neutr
 }
 
 function handlePluginEnter(action: PluginFileEnterAction) {
+  // 卸载守卫：ZTools 暂未提供 off* 反注册接口，组件卸载后用 isUnmounted 拦截回调
+  if (isUnmounted.value) return
+
   route.value = 'main'
 
   if (action.type !== 'files' || !Array.isArray(action.payload)) return
@@ -632,16 +671,23 @@ function handlePluginEnter(action: PluginFileEnterAction) {
   )
 }
 
+function handlePluginOut() {
+  if (isUnmounted.value) return
+  isDragging.value = false
+}
+
 onMounted(() => {
   loadSettings()
 
   window.ztools?.onPluginEnter?.(handlePluginEnter)
-  window.ztools?.onPluginOut?.(() => {
-    isDragging.value = false
-  })
+  window.ztools?.onPluginOut?.(handlePluginOut)
 })
 
 onUnmounted(() => {
+  // 标记卸载，让仍可能被 ZTools 触发的 onPluginEnter/onPluginOut 回调直接 no-op
+  isUnmounted.value = true
+  // 取消进行中的批处理（避免回调继续操作已卸载组件的 reactive state）
+  cancelRequested.value = true
   // 清理拖拽状态
   isDragging.value = false
   // 清理定时器
@@ -649,8 +695,8 @@ onUnmounted(() => {
     window.clearTimeout(completionToastTimer)
     completionToastTimer = null
   }
-  // 注意：ZTools 的 onPluginEnter/onPluginOut 可能没有对应的注销 API
-  // 如果有，应该在这里调用，例如：window.ztools?.offPluginEnter?.(handlePluginEnter)
+  // 注意：ZTools 当前 API 未提供 onPluginEnter / onPluginOut 的反注册接口；
+  // 如未来开放（如 offPluginEnter），可在此处调用以替代 isUnmounted 守卫。
 })
 </script>
 
@@ -667,6 +713,16 @@ onUnmounted(() => {
       <header class="main-actions">
         <span class="algorithm-note">{{ enabledAlgorithms.map((algorithm) => HASH_ALGORITHM_LABELS[algorithm]).join(' / ') }}</span>
         <div class="main-action-buttons">
+          <button
+            v-if="isHashing"
+            class="text-button"
+            type="button"
+            title="取消剩余批处理任务（已计算完成的结果不会被清除）"
+            :disabled="cancelRequested"
+            @click="cancelHashing"
+          >
+            {{ cancelRequested ? '正在取消…' : '取消' }}
+          </button>
           <button
             v-if="tasks.length && !isHashing"
             class="text-button"
@@ -815,10 +871,8 @@ onUnmounted(() => {
                   class="hash-value"
                   :class="{ 'is-interactive': task.status === 'done' }"
                   :disabled="task.status !== 'done'"
-                  :title="task.status === 'done' ? '点击复制' : getHashValue(task, algorithm)"
+                  :title="getHashValue(task, algorithm)"
                   @click="task.status === 'done' && copyHash(task, algorithm)"
-                  @dragstart.prevent
-                  @selectstart.prevent
                 >
                   {{ getHashValue(task, algorithm) }}
                 </button>
@@ -828,6 +882,7 @@ onUnmounted(() => {
                   :class="{ 'is-disabled': !isRowCaseToggleEnabled(task) }"
                   :aria-disabled="isRowCaseToggleEnabled(task) ? 'false' : 'true'"
                   :aria-label="getRowCaseToggleLabel(task, algorithm)"
+                  :tabindex="isRowCaseToggleEnabled(task) ? 0 : -1"
                   :title="isRowCaseToggleEnabled(task) ? getRowCaseToggleLabel(task, algorithm) : '计算完成后可切换大小写'"
                   @click="toggleRowCase(task, algorithm)"
                   @keydown.enter.prevent="toggleRowCase(task, algorithm)"

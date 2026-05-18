@@ -24,7 +24,8 @@ declare global {
   type CoreHashAlgorithm = 'md5' | 'sha1' | 'sha256'
   type ExtraHashAlgorithm = 'crc32' | 'sha384' | 'sha512'
   type HashAlgorithm = CoreHashAlgorithm | ExtraHashAlgorithm
-  type HashResult = Partial<Record<HashAlgorithm, string>> & Record<CoreHashAlgorithm, string>
+  // 与 preload services.js 的实际行为对齐：仅返回调用方传入的算法子集；core 算法是否存在由调用方保证
+  type HashResult = Partial<Record<HashAlgorithm, string>>
 
   interface Services {
     selectFiles: () => FileInfo[]

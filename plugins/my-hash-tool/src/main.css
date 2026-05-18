@@ -628,9 +628,9 @@ input:focus-visible {
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
-  user-select: none;
-  -webkit-user-select: none;
-  cursor: default;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
   transition:
     border-color 0.15s ease,
     background 0.15s ease;
