@@ -173,10 +173,12 @@ const resetSearchAndFocus = async () => {
 watch(activeTab, doReload)
 
 // 当对话框打开时，阻止全局键盘快捷键（如 Enter 粘贴）
+const isAnyModalOpen = computed(() =>
+  showDeleteConfirm.value || showClearConfirm.value || favoriteDialog.value.show
+)
+
 const handleGlobalKeydown = (event) => {
-  if (showDeleteConfirm.value || showClearConfirm.value || favoriteDialog.value.show) {
-    return
-  }
+  if (isAnyModalOpen.value) return
   handleKeydown(event)
 }
 

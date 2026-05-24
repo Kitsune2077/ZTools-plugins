@@ -11,18 +11,20 @@ const emit = defineEmits(['confirm', 'cancel'])
 const remark = ref('')
 const dialogContentRef = ref(null)
 const remarkInputRef = ref(null)
+let focusableEls = []
 
-const trapFocus = (e) => {
+const updateFocusableEls = () => {
   const el = dialogContentRef.value
   if (!el) return
-  const focusable = el.querySelectorAll(
+  focusableEls = Array.from(el.querySelectorAll(
     'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-  )
-  if (focusable.length === 0) return
+  ))
+}
 
-  const first = focusable[0]
-  const last = focusable[focusable.length - 1]
-
+const trapFocus = (e) => {
+  if (focusableEls.length === 0) return
+  const first = focusableEls[0]
+  const last = focusableEls[focusableEls.length - 1]
   if (e.shiftKey && document.activeElement === first) {
     e.preventDefault()
     last.focus()
@@ -59,10 +61,12 @@ watch(() => props.show, (val) => {
     remark.value = ''
     window.addEventListener('keydown', handleKeydown)
     nextTick(() => {
+      updateFocusableEls()
       remarkInputRef.value?.focus()
     })
   } else {
     window.removeEventListener('keydown', handleKeydown)
+    focusableEls = []
   }
 })
 
