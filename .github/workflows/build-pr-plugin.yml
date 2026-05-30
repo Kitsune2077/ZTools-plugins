@@ -63,7 +63,6 @@ jobs:
 
           const outputs = {
             number: String(pullRequest.number),
-            head_repo: pullRequest.head.repo.full_name,
             head_sha: pullRequest.head.sha,
           }
 
@@ -75,16 +74,21 @@ jobs:
           )
 
           console.log(`Resolved PR #${outputs.number}`)
-          console.log(`Head: ${outputs.head_repo}@${outputs.head_sha}`)
+          console.log(`Head SHA: ${outputs.head_sha}`)
           NODE
 
       - name: Checkout PR code
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ steps.pr.outputs.head_repo }}
-          ref: ${{ steps.pr.outputs.head_sha }}
-          fetch-depth: 0
-          persist-credentials: false
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          git init .
+          git remote add origin "https://github.com/${REPOSITORY}.git"
+          git fetch --no-tags --depth=1 origin "pull/${PR_NUMBER}/head"
+          git checkout --force FETCH_HEAD
+          git clean -ffdx
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
