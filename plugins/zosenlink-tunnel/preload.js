@@ -433,11 +433,26 @@ async function installClientRuntime(onProgress = emitInstallProgress) {
 
 async function ensureClientRuntime() {
   const local = getLocalClientInfo();
-  if (local.installed) {
-    ensureExecutable(local.executable);
-    return local;
+  try {
+    emitInstallProgress({ phase: "metadata", percent: 0 });
+    const latest = await fetchLatestClient();
+    if (local.installed && local.version === latest.version) {
+      ensureExecutable(local.executable);
+      return local;
+    }
+    return await installClientRuntime();
+  } catch (error) {
+    if (local.installed) {
+      ensureExecutable(local.executable);
+      pushEvent({
+        source: "plugin",
+        type: "dependency_update_warning",
+        message: `客户端依赖更新检查失败，已使用本地版本：${normalizeError(error)}`
+      });
+      return local;
+    }
+    throw error;
   }
-  return installClientRuntime();
 }
 
 async function checkClientRuntime() {

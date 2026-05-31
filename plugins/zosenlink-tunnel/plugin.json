@@ -4,7 +4,7 @@
   "title": "内网穿透",
   "description": "免公网Ip，快速对外发布应用服务，内网建站、远程桌面、NAS云盘、游戏联机等",
   "author": "Zing",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "main": "index.html",
   "preload": "preload.js",
   "logo": "logo.png",
