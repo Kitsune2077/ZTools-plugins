@@ -33,7 +33,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
-          EVENT_PATH: ${{ github.event_path }}
           INPUT_PR_NUMBER: ${{ inputs.pr_number }}
           REPOSITORY: ${{ github.repository }}
         run: |
@@ -54,7 +53,11 @@ jobs:
           let pullRequest
 
           if (eventName === 'pull_request') {
-            const event = JSON.parse(readFileSync(process.env.EVENT_PATH, 'utf8'))
+            const eventPath = process.env.GITHUB_EVENT_PATH
+            if (!eventPath) {
+              throw new Error('GITHUB_EVENT_PATH is required for pull_request events')
+            }
+            const event = JSON.parse(readFileSync(eventPath, 'utf8'))
             pullRequest = event.pull_request
           } else {
             const prNumber = process.env.INPUT_PR_NUMBER
