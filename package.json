@@ -9,6 +9,7 @@
     "detect:all": "node scripts/detect-changes.js --all",
     "build": "node scripts/build-plugins.js",
     "clean:plugins-node-modules": "node scripts/clean-plugin-node-modules.js",
+    "download:latest-assets": "node scripts/download-latest-assets.js",
     "generate": "node scripts/generate-plugins-json.js"
   },
   "dependencies": {
