@@ -27,9 +27,10 @@ function getZToolsPath(name: string): string {
   if (typeof window !== "undefined" && window.ztools?.getPath) {
     return window.ztools.getPath(name);
   }
-  if (name === "temp") return process.env.TMPDIR || "/tmp";
-  if (name === "desktop") return path.join(process.env.HOME || "", "Desktop");
-  return process.env.HOME || "";
+  const os = require("node:os");
+  if (name === "temp") return os.tmpdir();
+  if (name === "desktop") return path.join(os.homedir(), "Desktop");
+  return os.homedir();
 }
 
 function payloadPaths(payload: unknown): string[] {
