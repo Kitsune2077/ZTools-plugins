@@ -31,4 +31,21 @@ describe("gif limits", () => {
     ).rejects.toThrow("GIF 尺寸过大");
     expect(rawPipelineReached).not.toHaveBeenCalled();
   });
+
+  it("rejects excessive GIF total work before reading frames", async () => {
+    const { createGif } = await import("../src/preload/processor");
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "image-batch-gif-work-"));
+    const frames = Array.from({ length: 100 }, (_, index) => path.join(dir, `frame-${index}.png`));
+
+    await expect(
+      createGif(frames, path.join(dir, "out.gif"), {
+        width: 1000,
+        height: 1000,
+        delayMs: 120,
+        loop: 0,
+        background: "#ffffff"
+      })
+    ).rejects.toThrow("GIF 总像素过大");
+    expect(rawPipelineReached).not.toHaveBeenCalled();
+  });
 });

@@ -324,6 +324,30 @@ describe("offline processing engine", () => {
     expect(metadata.height).toBe(36);
   });
 
+  it("applies relative crop geometry per image in mixed-size batches", async () => {
+    const dir = await makeTempDir();
+    const first = path.join(dir, "crop-small.png");
+    const second = path.join(dir, "crop-wide.png");
+    const outputDir = path.join(dir, "out");
+    await makeImage(first, 100, 100, "#446a9d");
+    await makeImage(second, 200, 100, "#9d6a44");
+
+    const results = await processImages([first, second], {
+      output: { directory: outputDir, namingPattern: "{name}-crop.{ext}", overwrite: false },
+      format: { type: "png" },
+      crop: { left: 25, top: 25, width: 50, height: 50 },
+      cropRelative: { left: 0.25, top: 0.25, width: 0.5, height: 0.5 }
+    });
+
+    expect(results.every((result) => result.ok)).toBe(true);
+    const firstMeta = await sharp(results[0].outputPath).metadata();
+    const secondMeta = await sharp(results[1].outputPath).metadata();
+    expect(firstMeta.width).toBe(50);
+    expect(firstMeta.height).toBe(50);
+    expect(secondMeta.width).toBe(100);
+    expect(secondMeta.height).toBe(50);
+  });
+
   it("merges PDFs in input order", async () => {
     const dir = await makeTempDir();
     const first = path.join(dir, "a.pdf");

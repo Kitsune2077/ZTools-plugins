@@ -50,6 +50,13 @@ export interface CropBox {
   height: number;
 }
 
+export interface RelativeCropBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 export interface BorderSettings {
   enabled: boolean;
   width: number;
@@ -80,6 +87,7 @@ export interface ImageJobSettings {
   format?: FormatSettings;
   resize?: ResizeSettings;
   crop?: CropBox;
+  cropRelative?: RelativeCropBox;
   rotate?: number;
   flip?: "horizontal" | "vertical" | "both";
   border?: BorderSettings;

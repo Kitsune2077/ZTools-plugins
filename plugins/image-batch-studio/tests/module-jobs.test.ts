@@ -77,13 +77,29 @@ describe("module job settings", () => {
 
     expect(buildModuleJobSettings("crop", settings, file)).toEqual({
       output,
-      crop: { left: 0, top: 0, width: 640, height: 480 }
+      crop: { left: 0, top: 0, width: 640, height: 480 },
+      cropRelative: { left: 0, top: 0, width: 1, height: 1 }
     });
     expect(buildModuleJobSettings("manual", settings, file)).toEqual({
       output,
-      crop: { left: 0, top: 0, width: 640, height: 480 }
+      crop: { left: 0, top: 0, width: 640, height: 480 },
+      cropRelative: { left: 0, top: 0, width: 1, height: 1 }
     });
     expect(defaultCropForFile(file)).toEqual({ left: 0, top: 0, width: 640, height: 480 });
+  });
+
+  it("stores crop modules as relative geometry for mixed-size batches", () => {
+    const file: Pick<SourceFile, "width" | "height"> = { width: 100, height: 80 };
+    const settings = {
+      ...fullSettings(),
+      crop: { left: 25, top: 20, width: 50, height: 40 }
+    };
+
+    expect(buildModuleJobSettings("manual", settings, file)).toEqual({
+      output,
+      crop: { left: 25, top: 20, width: 50, height: 40 },
+      cropRelative: { left: 0.25, top: 0.25, width: 0.5, height: 0.5 }
+    });
   });
 
   it("routes non-image modules away from batch image processing", () => {

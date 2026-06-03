@@ -115,4 +115,28 @@ describe("file discovery", () => {
 
     expect(files.map((file) => file.path)).toEqual([readable]);
   }, 2000);
+
+  it("stops discovery at the configured file limit", async () => {
+    const dir = await makeTempDir();
+    await makeImage(path.join(dir, "a.png"));
+    await makeImage(path.join(dir, "b.png"));
+    await makeImage(path.join(dir, "c.png"));
+
+    const files = await discoverFiles([dir], { maxFiles: 2 });
+
+    expect(files).toHaveLength(2);
+  });
+
+  it("stops discovery at the configured directory depth", async () => {
+    const dir = await makeTempDir();
+    const nested = path.join(dir, "nested");
+    const tooDeep = path.join(nested, "too-deep");
+    await fs.mkdir(tooDeep, { recursive: true });
+    await makeImage(path.join(nested, "visible.png"));
+    await makeImage(path.join(tooDeep, "hidden.png"));
+
+    const files = await discoverFiles([dir], { maxDepth: 1 });
+
+    expect(files.map((file) => path.basename(file.path))).toEqual(["visible.png"]);
+  });
 });

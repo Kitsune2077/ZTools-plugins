@@ -1,4 +1,5 @@
 import type { CropBox, ImageJobSettings, SourceFile } from "./types";
+import { cropToRelative } from "./crop-ratio";
 
 export type ModuleId =
   | "compress"
@@ -46,8 +47,11 @@ export function buildModuleJobSettings(
     case "resize":
       return settings.resize ? { ...base, resize: settings.resize } : base;
     case "crop":
-    case "manual":
-      return { ...base, crop: settings.crop ?? defaultCropForFile(selectedFile) };
+    case "manual": {
+      const crop = settings.crop ?? defaultCropForFile(selectedFile);
+      const cropRelative = cropToRelative(crop, selectedFile);
+      return cropRelative ? { ...base, crop, cropRelative } : { ...base, crop };
+    }
     case "rotate": {
       const job: ImageJobSettings = { ...base };
       if (settings.rotate !== undefined) job.rotate = settings.rotate;

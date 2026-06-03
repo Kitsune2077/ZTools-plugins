@@ -4,6 +4,7 @@ import sharp, { type Sharp } from "sharp";
 import { PDFDocument } from "pdf-lib";
 import { GIFEncoder, applyPalette, quantize } from "gifenc";
 import type {
+  CropBox,
   GifOptions,
   ImageFormat,
   ImageJobSettings,
@@ -11,16 +12,20 @@ import type {
   ProcessResult,
   WatermarkPosition
 } from "../shared/types";
+import { clampCropToSize, cropFromRelative } from "../shared/crop-ratio";
 import { buildOutputPath, normalizeExtension } from "./paths";
 import {
   assertSafeGifRequest,
   assertSafePdfBatch,
+  assertSafeProcessOutput,
+  assertSafeProcessSource,
   estimateRgbaBytes,
   maxMergeDimension,
   maxMergeGap,
   maxMergePixels,
   maxMergePreparedBytes,
-  maxMergeSourcePixels
+  maxMergeSourcePixels,
+  maxProcessSourcePixels
 } from "./processing-limits";
 
 const imageExtensions = new Set(["jpg", "jpeg", "png", "webp", "avif", "heif", "heic", "tif", "tiff", "gif"]);
@@ -97,6 +102,108 @@ function formatFromPath(filePath: string): ImageFormat {
 
 function outputFormat(settings: ImageJobSettings, inputPath: string): ImageFormat {
   return settings.format?.type ?? formatFromPath(inputPath);
+}
+
+interface Dimensions {
+  width: number;
+  height: number;
+}
+
+function dimensionsFromMetadata(width: number | undefined, height: number | undefined): Dimensions | undefined {
+  if (!width || !height) return undefined;
+  return { width, height };
+}
+
+function normalizedQuarterTurn(value: number | undefined): number {
+  const degrees = Number.isFinite(value) ? Math.round(value as number) : 0;
+  return ((degrees % 360) + 360) % 360;
+}
+
+function dimensionsAfterRotate(dimensions: Dimensions, rotate: number | undefined): Dimensions {
+  const degrees = normalizedQuarterTurn(rotate);
+  return degrees === 90 || degrees === 270
+    ? { width: dimensions.height, height: dimensions.width }
+    : dimensions;
+}
+
+function scaledDimensions(dimensions: Dimensions, scale: number): Dimensions {
+  return {
+    width: Math.max(1, Math.round(dimensions.width * scale)),
+    height: Math.max(1, Math.round(dimensions.height * scale))
+  };
+}
+
+function dimensionsAfterResize(dimensions: Dimensions, settings: ImageJobSettings): Dimensions {
+  const resize = settings.resize;
+  if (!resize?.width && !resize?.height) return dimensions;
+
+  const width = resize.width;
+  const height = resize.height;
+  const withoutEnlargement = resize.withoutEnlargement ?? true;
+
+  if (resize.mode === "exact") {
+    return {
+      width: Math.max(1, Math.round(width ?? dimensions.width)),
+      height: Math.max(1, Math.round(height ?? dimensions.height))
+    };
+  }
+
+  if (resize.mode === "long-edge" || resize.mode === "short-edge") {
+    const target = width ?? height;
+    if (!target) return dimensions;
+    const sourceEdge =
+      resize.mode === "long-edge"
+        ? Math.max(dimensions.width, dimensions.height)
+        : Math.min(dimensions.width, dimensions.height);
+    const scale = withoutEnlargement ? Math.min(1, target / sourceEdge) : target / sourceEdge;
+    return scaledDimensions(dimensions, scale);
+  }
+
+  if ((resize.mode === "cover" || resize.mode === "contain") && width && height) {
+    return { width, height };
+  }
+
+  const widthScale = width ? width / dimensions.width : undefined;
+  const heightScale = height ? height / dimensions.height : undefined;
+  let scale = Math.min(widthScale ?? Number.POSITIVE_INFINITY, heightScale ?? Number.POSITIVE_INFINITY);
+  if (scale === Number.POSITIVE_INFINITY) return dimensions;
+  if (withoutEnlargement) scale = Math.min(1, scale);
+  return scaledDimensions(dimensions, scale);
+}
+
+function resolveCropBox(settings: ImageJobSettings, size: { width?: number; height?: number }): CropBox | undefined {
+  if (settings.cropRelative) {
+    return cropFromRelative(settings.cropRelative, size);
+  }
+  if (settings.crop) {
+    return clampCropToSize(settings.crop, size);
+  }
+  return undefined;
+}
+
+function estimateProcessDimensions(settings: ImageJobSettings, source: Dimensions): Dimensions {
+  let dimensions = dimensionsAfterRotate(source, settings.rotate);
+  dimensions = dimensionsAfterResize(dimensions, settings);
+  const crop = resolveCropBox(settings, dimensions);
+  if (crop) {
+    dimensions = { width: crop.width, height: crop.height };
+  }
+  if (settings.border?.enabled && settings.border.width > 0) {
+    const borderWidth = Math.max(0, Math.round(settings.border.width));
+    dimensions = {
+      width: dimensions.width + borderWidth * 2,
+      height: dimensions.height + borderWidth * 2
+    };
+  }
+  return dimensions;
+}
+
+function assertSafeProcessPlan(settings: ImageJobSettings, width: number | undefined, height: number | undefined): void {
+  assertSafeProcessSource(width, height);
+  const source = dimensionsFromMetadata(width, height);
+  if (!source) return;
+  const estimated = estimateProcessDimensions(settings, source);
+  assertSafeProcessOutput(estimated.width, estimated.height);
 }
 
 function applyResize(image: Sharp, settings: ImageJobSettings, width?: number, height?: number): Sharp {
@@ -330,8 +437,10 @@ async function processOne(
     }
 
     await ensureDirectory(settings.output.directory);
-    const initialMetadata = await sharp(inputPath).metadata();
-    let image = sharp(inputPath, { animated: false }).rotate();
+    const sharpInputOptions = { animated: false, limitInputPixels: maxProcessSourcePixels };
+    const initialMetadata = await sharp(inputPath, sharpInputOptions).metadata();
+    assertSafeProcessPlan(settings, initialMetadata.width, initialMetadata.height);
+    let image = sharp(inputPath, sharpInputOptions).rotate();
 
     if (settings.flip === "horizontal" || settings.flip === "both") image = image.flop();
     if (settings.flip === "vertical" || settings.flip === "both") image = image.flip();
@@ -343,17 +452,16 @@ async function processOne(
 
     image = applyResize(image, settings, initialMetadata.width, initialMetadata.height);
 
-    if (settings.crop) {
-      image = image.extract({
-        left: clampInteger(settings.crop.left, 0, 100000),
-        top: clampInteger(settings.crop.top, 0, 100000),
-        width: Math.max(1, Math.round(settings.crop.width)),
-        height: Math.max(1, Math.round(settings.crop.height))
-      });
+    const crop = resolveCropBox(settings, {
+      width: initialMetadata.width,
+      height: initialMetadata.height
+    });
+    if (crop) {
+      image = image.extract(crop);
     }
 
     if (settings.border?.enabled && settings.border.width > 0) {
-      if (settings.crop) {
+      if (crop) {
         image = (await materializeRgba(image)).image;
       }
       const borderWidth = Math.round(settings.border.width);
