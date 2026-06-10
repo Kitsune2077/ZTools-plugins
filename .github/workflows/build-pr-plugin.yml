@@ -16,6 +16,7 @@ on:
         type: string
 
 permissions:
+  actions: read
   contents: read
   pull-requests: read
 
@@ -24,8 +25,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-pr-plugin:
+  detect:
     runs-on: ubuntu-latest
+    outputs:
+      has_changes: ${{ steps.detect.outputs.has_changes }}
+      changed_plugins: ${{ steps.detect.outputs.changed_plugins }}
+      has_linux: ${{ steps.split.outputs.has_linux }}
+      has_windows: ${{ steps.split.outputs.has_windows }}
+      has_macos: ${{ steps.split.outputs.has_macos }}
+      linux_plugins: ${{ steps.split.outputs.linux_plugins }}
+      windows_plugins: ${{ steps.split.outputs.windows_plugins }}
+      macos_plugins: ${{ steps.split.outputs.macos_plugins }}
+      pr_number: ${{ steps.pr.outputs.number }}
 
     steps:
       - name: Resolve PR metadata
@@ -105,11 +116,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
-
       - name: Detect changed plugins
         id: detect
         env:
@@ -179,22 +185,47 @@ jobs:
 
           cat release/build-info.json
 
-      - name: Install root dependencies
+      - name: Split changed plugins by platform
+        id: split
         if: steps.detect.outputs.has_changes == 'true'
-        run: npm ci
+        run: node scripts/split-build-info-by-platform.js
 
-      - name: Build changed plugins
-        if: steps.detect.outputs.has_changes == 'true'
-        run: node scripts/build-plugins.js
-
-      - name: Upload plugin packages
+      - name: Upload build info
         if: steps.detect.outputs.has_changes == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: pr-${{ steps.pr.outputs.number }}-plugin-packages
+          name: pr-${{ steps.pr.outputs.number }}-build-info
           path: |
-            release/*.zip
             release/build-info.json
-            release/latest
+            release/build-info.linux.json
+            release/build-info.windows.json
+            release/build-info.macos.json
           if-no-files-found: error
           retention-days: 14
+
+  build-linux:
+    needs: detect
+    if: needs.detect.outputs.has_linux == 'true'
+    uses: ./.github/workflows/build-pr-plugin-platform.yml
+    with:
+      pr_number: ${{ needs.detect.outputs.pr_number }}
+      platform_name: linux
+      runner: ubuntu-latest
+
+  build-windows:
+    needs: detect
+    if: needs.detect.outputs.has_windows == 'true'
+    uses: ./.github/workflows/build-pr-plugin-platform.yml
+    with:
+      pr_number: ${{ needs.detect.outputs.pr_number }}
+      platform_name: windows
+      runner: windows-latest
+
+  build-macos:
+    needs: detect
+    if: needs.detect.outputs.has_macos == 'true'
+    uses: ./.github/workflows/build-pr-plugin-platform.yml
+    with:
+      pr_number: ${{ needs.detect.outputs.pr_number }}
+      platform_name: macos
+      runner: macos-latest

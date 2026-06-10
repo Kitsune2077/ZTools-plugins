@@ -126,19 +126,25 @@ function buildPlugin(pluginName) {
     console.log('检测到自定义构建脚本: build-plugin.sh');
 
     try {
-      // 给脚本添加执行权限（使用相对路径）
-      execSync('chmod +x build-plugin.sh', {
-        cwd: pluginPath,
-        stdio: 'inherit'
-      });
-
-      // 执行构建脚本
       console.log('执行自定义构建脚本...');
-      execSync('./build-plugin.sh', {
-        cwd: pluginPath,
-        stdio: 'inherit',
-        shell: '/bin/bash'
-      });
+      if (process.platform === 'win32') {
+        execSync('bash build-plugin.sh', {
+          cwd: pluginPath,
+          stdio: 'inherit'
+        });
+      } else {
+        // 给脚本添加执行权限（使用相对路径）
+        execSync('chmod +x build-plugin.sh', {
+          cwd: pluginPath,
+          stdio: 'inherit'
+        });
+
+        execSync('./build-plugin.sh', {
+          cwd: pluginPath,
+          stdio: 'inherit',
+          shell: '/bin/bash'
+        });
+      }
 
       console.log('✓ 自定义构建完成');
     } catch (error) {
