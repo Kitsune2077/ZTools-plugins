@@ -75,6 +75,8 @@ function applyHeight() {
 async function select(item) {
     const r = await window.recentApi.open(item);
     if (r.ok) {
+        // 关闭 ztool 主窗口（不仅退出插件视图），让用户专注于刚启动的 VSCode
+        ztools.hideMainWindow?.(false);
         ztools.outPlugin();
     }
     else {

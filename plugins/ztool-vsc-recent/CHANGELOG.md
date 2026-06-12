@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.1 — 2026-06-12
+
+### 修复
+
+- 选中条目启动 VSCode 后，ztool 主窗口未关闭。改为先 `hideMainWindow(false)` 再 `outPlugin()`，让 VSCode 自然抢焦点。
+
+### 测试
+
+- 新增 `tests/select-actions.test.ts`，将 select 后的 host 动作策略提取到 `src/select-actions.ts`，覆盖成功/失败/空 reason 三种分支。
+
 ## 0.1.0 — 2026-05-23
 
 首个公开版本。
