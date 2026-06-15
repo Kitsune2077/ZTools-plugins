@@ -46,13 +46,17 @@ const isLoadingLogo = ref(false)
 
 watch(() => props.app, (newApp) => {
   if (newApp) {
-    // 密码在存储中是 base64 编码的，编辑时解码显示
+    // 密码在存储中是 base64 编码的，编辑时解码显示（支持 UTF-8）
     let decodedPassword = ''
     if (newApp.basicAuth?.password) {
       try {
-        decodedPassword = atob(newApp.basicAuth.password)
+        decodedPassword = decodeURIComponent(escape(atob(newApp.basicAuth.password)))
       } catch {
-        decodedPassword = newApp.basicAuth.password
+        try {
+          decodedPassword = atob(newApp.basicAuth.password)
+        } catch {
+          decodedPassword = newApp.basicAuth.password
+        }
       }
     }
     formData.value = {
@@ -208,7 +212,7 @@ const handleSubmit = () => {
     if (username) {
       basicAuth = {
         username,
-        password: btoa(password)
+        password: btoa(unescape(encodeURIComponent(password)))
       }
     }
   }

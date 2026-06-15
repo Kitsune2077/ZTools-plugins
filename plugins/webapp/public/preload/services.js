@@ -1,12 +1,13 @@
 const fs = require('node:fs')
 const path = require('node:path')
+const os = require('node:os')
 
 // ============================================
 // 通过 window 向渲染进程注入 nodejs 能力
 // ============================================
 window.services = {
   getConfigPath() {
-    const userDataPath = window.ztools.getPath('userData') || path.join(process.env.USERPROFILE, '.ztools')
+    const userDataPath = window.ztools.getPath('userData') || path.join(os.homedir(), '.ztools')
     return path.join(userDataPath, 'webapp-configs.json')
   },
 

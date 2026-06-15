@@ -78,12 +78,16 @@ const getSafeIconUrl = (url: string): string => {
   return ''
 }
 
-// 解码 Basic Auth 密码（仅用于显示/传递，不修改原始存储数据）
+// 解码 Basic Auth 密码（支持 UTF-8）
 const decodePassword = (encoded: string): string => {
   try {
-    return atob(encoded)
+    return decodeURIComponent(escape(atob(encoded)))
   } catch {
-    return encoded
+    try {
+      return atob(encoded)
+    } catch {
+      return encoded
+    }
   }
 }
 
@@ -222,13 +226,16 @@ const selectApp = async (app: AppConfig) => {
 
 // webview 加载完成回调
 const onWebviewLoad = async () => {
+  // 防御性守卫：确保 currentApp 存在
+  if (!currentApp.value) return
+
   // 第一阶段完成：内联认证成功
   if (authLoadingPhase.value === 'inline') {
-    authenticatedApps.value[currentApp.value!.id] = true
+    authenticatedApps.value[currentApp.value.id] = true
 
     // 进入第二阶段：使用无凭据的原始URL加载
     authLoadingPhase.value = 'reload'
-    const cleanUrl = stripCredentials(currentApp.value!.url)
+    const cleanUrl = stripCredentials(currentApp.value.url)
     webviewSrc.value = ''
     await nextTick()
     webviewSrc.value = cleanUrl
@@ -315,43 +322,23 @@ const openDevTools = () => {
   }
 }
 
-// 存储事件监听器引用，用于清理
-let webviewElement: any = null
-
-const setupWebviewListeners = () => {
-  // 先移除旧的监听器，避免重复注册
-  if (webviewElement) {
-    webviewElement.removeEventListener('did-finish-load', onWebviewLoad)
-    webviewElement.removeEventListener('did-fail-load', onWebviewFail)
-  }
-  // 获取新的webview元素并注册监听器
-  webviewElement = webviewRef.value as any
-  if (webviewElement) {
-    webviewElement.addEventListener('did-finish-load', onWebviewLoad)
-    webviewElement.addEventListener('did-fail-load', onWebviewFail)
-  }
-}
-
 onMounted(() => {
   loadApps()
   // 页面加载时自动加载默认应用
   loadDefaultApp()
 })
 
-// 监听webviewSrc变化，重新设置监听器（带immediate确保初始时也触发）
-watch(webviewSrc, (newVal) => {
-  if (newVal) {
-    nextTick(() => {
-      setupWebviewListeners()
-    })
+// 监听 webviewRef 的变化，自动注册和销毁事件监听器，避免内存泄漏
+watch(webviewRef, (newEl, oldEl) => {
+  if (oldEl) {
+    const el = oldEl as any
+    el.removeEventListener('did-finish-load', onWebviewLoad)
+    el.removeEventListener('did-fail-load', onWebviewFail)
   }
-}, { immediate: true })
-
-// 组件卸载时清理监听器
-onUnmounted(() => {
-  if (webviewElement) {
-    webviewElement.removeEventListener('did-finish-load', onWebviewLoad)
-    webviewElement.removeEventListener('did-fail-load', onWebviewFail)
+  if (newEl) {
+    const el = newEl as any
+    el.addEventListener('did-finish-load', onWebviewLoad)
+    el.addEventListener('did-fail-load', onWebviewFail)
   }
 })
 </script>
