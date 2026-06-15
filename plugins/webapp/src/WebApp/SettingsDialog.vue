@@ -116,7 +116,15 @@ const handleFileSelect = (event: Event) => {
         } : undefined
       }))
 
-      if (validApps.length === 0) {
+      // 对导入数据内部的 id 进行去重
+      const seenIds = new Set<string>()
+      const dedupedApps = validApps.filter(app => {
+        if (seenIds.has(app.id)) return false
+        seenIds.add(app.id)
+        return true
+      })
+
+      if (dedupedApps.length === 0) {
         fileError.value = '文件中没有有效的应用配置'
         return
       }
@@ -124,11 +132,14 @@ const handleFileSelect = (event: Event) => {
       importData.value = {
         version: data.version || '1.0.0',
         exportedAt: data.exportedAt || new Date().toISOString(),
-        apps: validApps
+        apps: dedupedApps
       }
     } catch {
       fileError.value = '无法解析文件，请确保文件格式正确'
     }
+  }
+  reader.onerror = () => {
+    fileError.value = '文件读取失败，请重试'
   }
   reader.readAsText(file)
 }

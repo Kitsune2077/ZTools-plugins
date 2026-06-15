@@ -50,7 +50,9 @@ watch(() => props.app, (newApp) => {
     let decodedPassword = ''
     if (newApp.basicAuth?.password) {
       try {
-        decodedPassword = decodeURIComponent(escape(atob(newApp.basicAuth.password)))
+        decodedPassword = new TextDecoder().decode(
+          Uint8Array.from(atob(newApp.basicAuth.password), c => c.charCodeAt(0))
+        )
       } catch {
         try {
           decodedPassword = atob(newApp.basicAuth.password)
@@ -135,17 +137,23 @@ const getDomain = (url: string): string | null => {
 const checkImage = (url: string, timeout = 5000): Promise<boolean> => {
   return new Promise((resolve) => {
     const img = new Image()
+    const cleanup = () => {
+      clearTimeout(timer)
+      img.onload = null
+      img.onerror = null
+    }
     const timer = setTimeout(() => {
+      cleanup()
       img.src = ''
       resolve(false)
     }, timeout)
 
     img.onload = () => {
-      clearTimeout(timer)
+      cleanup()
       resolve(true)
     }
     img.onerror = () => {
-      clearTimeout(timer)
+      cleanup()
       resolve(false)
     }
     img.src = url
@@ -212,7 +220,7 @@ const handleSubmit = () => {
     if (username) {
       basicAuth = {
         username,
-        password: btoa(unescape(encodeURIComponent(password)))
+        password: btoa(String.fromCharCode(...new TextEncoder().encode(password)))
       }
     }
   }

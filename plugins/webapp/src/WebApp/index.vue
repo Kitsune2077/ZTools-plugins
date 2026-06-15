@@ -81,7 +81,9 @@ const getSafeIconUrl = (url: string): string => {
 // 解码 Basic Auth 密码（支持 UTF-8）
 const decodePassword = (encoded: string): string => {
   try {
-    return decodeURIComponent(escape(atob(encoded)))
+    return new TextDecoder().decode(
+      Uint8Array.from(atob(encoded), c => c.charCodeAt(0))
+    )
   } catch {
     try {
       return atob(encoded)
@@ -188,9 +190,10 @@ const deleteApp = (id: string) => {
 
 // 选择应用
 const selectApp = async (app: AppConfig) => {
+  const webview = webviewRef.value as any
+
   // 如果是同一个app，刷新页面
   if (currentApp.value?.id === app.id) {
-    const webview = webviewRef.value as any
     if (webview) {
       webviewLoading.value = true
       webview.reload()
@@ -199,8 +202,7 @@ const selectApp = async (app: AppConfig) => {
   }
 
   currentApp.value = app
-  webviewSrc.value = ''
-  await nextTick()
+  webviewLoading.value = true
 
   // Basic Auth应用：需要两阶段加载（内联认证 → 原始URL）
   // 支持两种方式：1) basicAuth字段  2) URL中包含内联凭据
@@ -211,16 +213,22 @@ const selectApp = async (app: AppConfig) => {
 
   if (needsAuth && !isAuthenticated) {
     authLoadingPhase.value = 'inline'
-    webviewLoading.value = true
     // 第一阶段：使用内联地址认证
     const authUrl = hasBasicAuth ? buildUrlWithAuth(app.url, app.basicAuth) : app.url
-    webviewSrc.value = authUrl
+    if (webview) {
+      webview.loadURL(authUrl)
+    } else {
+      webviewSrc.value = authUrl
+    }
   } else {
     // 已认证或无认证：直接加载（移除凭据）
     authLoadingPhase.value = 'idle'
-    webviewLoading.value = true
     const cleanUrl = urlHasCredentials ? stripCredentials(app.url) : app.url
-    webviewSrc.value = cleanUrl
+    if (webview) {
+      webview.loadURL(cleanUrl)
+    } else {
+      webviewSrc.value = cleanUrl
+    }
   }
 }
 
@@ -236,9 +244,10 @@ const onWebviewLoad = async () => {
     // 进入第二阶段：使用无凭据的原始URL加载
     authLoadingPhase.value = 'reload'
     const cleanUrl = stripCredentials(currentApp.value.url)
-    webviewSrc.value = ''
-    await nextTick()
-    webviewSrc.value = cleanUrl
+    const webview = webviewRef.value as any
+    if (webview) {
+      webview.loadURL(cleanUrl)
+    }
     return
   }
 
@@ -329,16 +338,15 @@ onMounted(() => {
 })
 
 // 监听 webviewRef 的变化，自动注册和销毁事件监听器，避免内存泄漏
-watch(webviewRef, (newEl, oldEl) => {
-  if (oldEl) {
-    const el = oldEl as any
-    el.removeEventListener('did-finish-load', onWebviewLoad)
-    el.removeEventListener('did-fail-load', onWebviewFail)
-  }
+watch(webviewRef, (newEl, _, onCleanup) => {
   if (newEl) {
     const el = newEl as any
     el.addEventListener('did-finish-load', onWebviewLoad)
     el.addEventListener('did-fail-load', onWebviewFail)
+    onCleanup(() => {
+      el.removeEventListener('did-finish-load', onWebviewLoad)
+      el.removeEventListener('did-fail-load', onWebviewFail)
+    })
   }
 })
 </script>
