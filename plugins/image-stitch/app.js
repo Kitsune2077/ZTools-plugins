@@ -143,6 +143,8 @@
       } else if (e.clientY > rect.bottom) {
         startAutoScroll(imageList, e.clientY);
         applyDragShifts(state.images.length - 1);
+      } else if (!imageList.contains(e.target)) {
+        stopAutoScroll();
       }
     });
     imageList.addEventListener('drop', (e) => {
@@ -234,6 +236,9 @@
       updateUI();
       render();
     };
+    img.onerror = () => {
+      ztools.showNotification('加载图片失败: ' + filePath.split(/[/\\]/).pop());
+    };
     img.src = filePath.startsWith('file://') ? filePath : 'file:///' + filePath.replace(/\\/g, '/');
   }
 
@@ -249,6 +254,9 @@
       state.images.push({ img, name: name || '粘贴图片', width: img.naturalWidth, height: img.naturalHeight });
       updateUI();
       render();
+    };
+    img.onerror = () => {
+      ztools.showNotification('加载图片数据失败');
     };
     img.src = dataURL;
   }
@@ -334,18 +342,6 @@
       div.addEventListener('dragend', () => {
         div.classList.remove('dragging');
         stopAutoScroll();
-        if (isDraggingInternal && dragFromIdx >= 0 && lastShiftTarget >= 0 && dragFromIdx !== lastShiftTarget) {
-          const fromIdx = dragFromIdx;
-          const toIdx = lastShiftTarget;
-          isDraggingInternal = false;
-          dragFromIdx = -1;
-          clearDragShifts();
-          const [moved] = state.images.splice(fromIdx, 1);
-          state.images.splice(toIdx, 0, moved);
-          updateUI();
-          render();
-          return;
-        }
         isDraggingInternal = false;
         clearDragShifts();
         dragFromIdx = -1;
@@ -544,7 +540,12 @@
     if (!result) return;
 
     const dataURL = canvas.toDataURL(getOutputMimeType(), state.quality);
-    const base64 = dataURL.split(',')[1];
+    const parts = dataURL.split(',');
+    if (parts.length < 2 || !parts[1]) {
+      ztools.showNotification('保存失败: 图片尺寸过大，无法生成数据');
+      return;
+    }
+    const base64 = parts[1];
     try {
       const fs = require('fs');
       fs.writeFileSync(result, Buffer.from(base64, 'base64'));
