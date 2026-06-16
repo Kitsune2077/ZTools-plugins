@@ -61,15 +61,17 @@ export const useBookStore = defineStore('books', () => {
       const data = storageGet('hushreader_books')
       if (data) {
         const parsed = JSON.parse(data)
-        // 兼容旧数据：将单分类字段 category 迁移到 categories 数组
-        parsed.forEach((b: any) => {
-          if (b.category && !b.categories) {
-            b.categories = [b.category]
-            delete b.category
-          }
-          if (!Array.isArray(b.categories)) b.categories = []
-        })
-        books.value = parsed
+        if (Array.isArray(parsed)) {
+          // 兼容旧数据：将单分类字段 category 迁移到 categories 数组
+          parsed.forEach((b: any) => {
+            if (b.category && !b.categories) {
+              b.categories = [b.category]
+              delete b.category
+            }
+            if (!Array.isArray(b.categories)) b.categories = []
+          })
+          books.value = parsed
+        }
       }
       const cur = storageGet('hushreader_current')
       if (cur) currentBookId.value = cur

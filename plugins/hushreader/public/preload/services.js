@@ -153,6 +153,16 @@ window.services = {
     }
   },
 
+  getFileModifiedTime(filePath) {
+    try {
+      const fullPath = path.resolve(filePath)
+      const stat = fs.statSync(fullPath)
+      return stat.mtimeMs
+    } catch {
+      return null
+    }
+  },
+
   writeTextFile(text) {
     const filePath = path.join(
       window.ztools.getPath('downloads'),

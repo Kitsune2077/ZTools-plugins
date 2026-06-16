@@ -293,6 +293,8 @@ async function importBook(filePath: string) {
     } else {
       toast('该书籍已在书架中', 'info')
     }
+  } catch (error: any) {
+    toast(`导入失败: ${error.message || error}`, 'error')
   } finally {
     isLoading.value = false
   }
