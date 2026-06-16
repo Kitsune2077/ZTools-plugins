@@ -46,7 +46,16 @@ const contextMenuPos = ref({ x: 0, y: 0 })
 function onContextMenu(bookId: string, e: MouseEvent) {
   e.preventDefault()
   contextMenuBook.value = bookId
-  contextMenuPos.value = { x: e.clientX, y: e.clientY }
+  const target = (e.currentTarget as HTMLElement)
+  const rect = target?.getBoundingClientRect()
+  if (rect) {
+    contextMenuPos.value = {
+      x: rect.right - rect.width / 3,
+      y: rect.bottom - rect.height / 3
+    }
+  } else {
+    contextMenuPos.value = { x: e.clientX, y: e.clientY }
+  }
 }
 
 function closeContextMenu() {
@@ -58,16 +67,20 @@ const showChapterList = ref(false)
 const chapterListBookId = ref<string | null>(null)
 const chapterListLoading = ref(false)
 const chapterListItems = ref<{ index: number; title: string }[]>([])
+const chapterListCurrentIndex = ref(-1)
 
 async function openChapterList(bookId: string) {
   closeContextMenu()
   chapterListBookId.value = bookId
   chapterListItems.value = []
+  chapterListCurrentIndex.value = -1
   showChapterList.value = true
   chapterListLoading.value = true
 
   const book = bookStore.books.find(b => b.id === bookId)
   if (!book) { chapterListLoading.value = false; return }
+
+  chapterListCurrentIndex.value = book.lastChapter ?? -1
 
   try {
     if (book.format === 'txt') {
@@ -88,6 +101,12 @@ async function openChapterList(bookId: string) {
     showChapterList.value = false
   } finally {
     chapterListLoading.value = false
+    if (chapterListCurrentIndex.value >= 0) {
+      requestAnimationFrame(() => {
+        const el = document.querySelector('.chapter-item.current')
+        el?.scrollIntoView({ block: 'center', behavior: 'instant' })
+      })
+    }
   }
 }
 
@@ -363,7 +382,7 @@ const cfg = computed(() => configStore.config)
   <div class="bookshelf" @drop="onDrop" @dragover="onDragover">
     <!-- Header -->
     <header class="shelf-header">
-      <h1 class="shelf-title">我的书架</h1>
+      <h1 class="shelf-title">书架</h1>
       <div class="shelf-search">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
@@ -400,6 +419,11 @@ const cfg = computed(() => configStore.config)
         @click="bookStore.activeCategory = cat"
       >{{ cat }}</button>
       <div class="sort-group">
+        <button
+          class="sort-btn"
+          :class="{ active: bookStore.sortBy === 'lastReadAt' }"
+          @click="bookStore.sortBy = 'lastReadAt'"
+        >最近阅读</button>
         <button
           class="sort-btn"
           :class="{ active: bookStore.sortBy === 'addedAt' }"
@@ -480,6 +504,7 @@ const cfg = computed(() => configStore.config)
             v-for="ch in chapterListItems"
             :key="ch.index"
             class="chapter-item"
+            :class="{ current: ch.index === chapterListCurrentIndex }"
             @click="jumpToChapter(ch.index)"
           >
             <span class="ch-index">{{ ch.index + 1 }}</span>
@@ -821,6 +846,15 @@ const cfg = computed(() => configStore.config)
 }
 
 .chapter-item:hover { background: var(--c-surface-sunken); }
+
+.chapter-item.current {
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+}
+
+.chapter-item.current .ch-index {
+  color: var(--c-accent);
+}
 
 .ch-index {
   min-width: 28px;

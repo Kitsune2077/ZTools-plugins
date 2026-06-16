@@ -49,10 +49,22 @@ function storageSet(key: string, value: string) {
   } catch { }
 }
 
+function storageRemove(key: string) {
+  try {
+    const zStorage = (window as any).ztools?.dbStorage
+    if (zStorage?.removeItem) {
+      zStorage.removeItem(key)
+    }
+  } catch { }
+  try {
+    window.localStorage.removeItem(key)
+  } catch { }
+}
+
 export const useBookStore = defineStore('books', () => {
   const books = ref<Book[]>([])
   const currentBookId = ref<string | null>(null)
-  const sortBy = ref<'addedAt' | 'name' | 'author'>('addedAt')
+  const sortBy = ref<'addedAt' | 'name' | 'author' | 'lastReadAt'>('addedAt')
   const searchQuery = ref('')
   const activeCategory = ref<string>('全部')
 
@@ -103,6 +115,7 @@ export const useBookStore = defineStore('books', () => {
   function removeBook(id: string) {
     books.value = books.value.filter(b => b.id !== id)
     if (currentBookId.value === id) currentBookId.value = null
+    storageRemove(`hushreader_chapters_${id}`)
     save()
   }
 
@@ -152,6 +165,8 @@ export const useBookStore = defineStore('books', () => {
       list.sort((a, b) => a.title.localeCompare(b.title))
     } else if (sortBy.value === 'author') {
       list.sort((a, b) => (a.author || '').localeCompare(b.author || ''))
+    } else if (sortBy.value === 'lastReadAt') {
+      list.sort((a, b) => (b.lastReadAt || 0) - (a.lastReadAt || 0))
     } else {
       list.sort((a, b) => b.addedAt - a.addedAt)
     }

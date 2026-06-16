@@ -15,6 +15,46 @@ export function preprocessText(text: string): string {
   return result
 }
 
+function isTocLike(lines: string[], start: number, end: number, regex: RegExp): boolean {
+  let matchCount = 0
+  let nonEmptyCount = 0
+  for (let i = start; i < end; i++) {
+    const trimmed = lines[i].trim()
+    if (!trimmed) continue
+    nonEmptyCount++
+    if (regex.test(trimmed) && trimmed.length < 60) {
+      matchCount++
+    }
+  }
+  return nonEmptyCount > 0 && matchCount / nonEmptyCount >= 0.5
+}
+
+function findTocEnd(lines: string[], regex: RegExp): number {
+  const windowSize = 20
+  for (let i = 0; i <= lines.length - windowSize; i++) {
+    if (isTocLike(lines, i, i + windowSize, regex)) {
+      let end = i + windowSize
+      while (end < lines.length) {
+        const trimmed = lines[end].trim()
+        if (trimmed && !regex.test(trimmed) && trimmed.length < 60) {
+          let matchAfter = 0
+          let nonEmptyAfter = 0
+          for (let j = end + 1; j < Math.min(end + 11, lines.length); j++) {
+            const t = lines[j].trim()
+            if (!t) continue
+            nonEmptyAfter++
+            if (regex.test(t) && t.length < 60) matchAfter++
+          }
+          if (nonEmptyAfter === 0 || matchAfter / nonEmptyAfter < 0.5) break
+        }
+        end++
+      }
+      return end
+    }
+  }
+  return 0
+}
+
 export function parseTxt(text: string, customRegex?: string): Chapter[] {
   const normalized = preprocessText(text)
 
@@ -26,10 +66,13 @@ export function parseTxt(text: string, customRegex?: string): Chapter[] {
   }
 
   const lines = normalized.split('\n')
+  const tocEnd = findTocEnd(lines, regex)
+  const contentLines = tocEnd > 0 ? lines.slice(tocEnd) : lines
+
   const chapters: Chapter[] = []
   let current: { title: string; lines: string[] } | null = null
 
-  for (const line of lines) {
+  for (const line of contentLines) {
     const trimmed = line.trim()
     if (regex.test(trimmed) && trimmed.length < 60) {
       if (current) {
@@ -60,7 +103,7 @@ export function parseTxt(text: string, customRegex?: string): Chapter[] {
     return [{
       index: 0,
       title: '全文',
-      content: normalized.trim()
+      content: contentLines.join('\n').trim()
     }]
   }
 

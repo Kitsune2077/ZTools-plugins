@@ -14,7 +14,7 @@
   "features": [
     {
       "code": "bookshelf",
-      "explain": "打开我的书架",
+      "explain": "打开书架",
       "icon": "logo.png",
       "cmds": [
         "yyh",

@@ -7,7 +7,7 @@ import { useConfigStore } from './stores/config'
 import { parseTxt } from './utils/txtParser'
 import { parseEpub } from './utils/epubParser'
 
-type HushreaderCommand = string | { type?: string; width?: number; height?: number; x?: number; y?: number }
+type HushreaderCommand = string | { type?: string; width?: number; height?: number; x?: number; y?: number; percent?: number }
 type HushreaderBounds = { x: number; y: number; width: number; height: number }
 type AppBrowserWindow = {
   id: number
@@ -72,7 +72,7 @@ const hushreaderLines = computed(() => readerStore.hushreaderLines)
 
 const progressLabel = computed(() => {
   if (hushreaderCfg.value.progressMode === 'percent') {
-    return `${readerStore.readingPercent}%`
+    return `${readerStore.readingPercent.toFixed(2)}%`
   }
   const total = readerStore.chapters.length
   const ci = readerStore.currentChapterIndex
@@ -202,9 +202,12 @@ function getHushreaderPayload(bounds = getHushreaderWindowBounds()) {
       showHushreaderMeta: hushreaderCfg.value.showHushreaderMeta,
       progressMode: hushreaderCfg.value.progressMode,
       hideOnMouseLeave: hushreaderCfg.value.hideOnMouseLeave,
+      mouseEnterDelay: hushreaderCfg.value.mouseEnterDelay,
       wheelTurnPage: hushreaderCfg.value.wheelTurnPage,
       bgColor: hushreaderCfg.value.bgColor,
-      textColor: hushreaderCfg.value.textColor
+      textColor: hushreaderCfg.value.textColor,
+      autoFlipEnabled: hushreaderCfg.value.autoFlipEnabled,
+      fontFamily: hushreaderCfg.value.fontFamily
     }
   }
 }
@@ -225,13 +228,15 @@ function positionHushreaderWindow() {
   applyHushreaderWindowBounds(getHushreaderWindowBounds())
 }
 
-function pushHushreaderState() {
+function pushHushreaderState(options?: { skipShow?: boolean }) {
   if (!hushreaderWindow || hushreaderWindow.isDestroyed?.()) return
   const bounds = getHushreaderWindowBounds()
   const payload = getHushreaderPayload(bounds)
-  if (payload.visible) {
+  if (payload.visible && !options?.skipShow) {
     applyHushreaderWindowBounds(bounds)
     hushreaderWindow.show?.()
+  } else if (payload.visible && options?.skipShow) {
+    applyHushreaderWindowBounds(bounds)
   } else {
     hushreaderWindow.hide?.()
   }
@@ -243,10 +248,10 @@ function pushHushreaderState() {
   })
 }
 
-function ensureHushreaderWindow() {
+function ensureHushreaderWindow(options?: { skipShow?: boolean }) {
   if (!hushreaderActivated.value || !(window as any).ztools?.createBrowserWindow || !currentBook.value) return
   if (hushreaderWindow && !hushreaderWindow.isDestroyed?.()) {
-    pushHushreaderState()
+    pushHushreaderState(options)
     return
   }
   const bounds = getHushreaderWindowBounds()
@@ -377,14 +382,6 @@ async function saveChaptersToCache(bookId: string, chapters: any[]) {
   }
 }
 
-function clearChapterCache(bookId: string) {
-  try {
-    const zStorage = (window as any).ztools?.dbStorage
-    const storage = zStorage?.removeItem ? zStorage : window.localStorage
-    storage.removeItem(getChapterCacheKey(bookId))
-  } catch {}
-}
-
 async function parseBookAndGetChapters(book: typeof bookStore.currentBook): Promise<any[]> {
   if (!book) throw new Error('书籍不存在')
 
@@ -489,6 +486,27 @@ function handleHushreaderCommand(command: HushreaderCommand) {
     if (command?.type === 'move' && typeof command.x === 'number' && typeof command.y === 'number') {
       moveHushreaderWindow(command.x, command.y)
     }
+    if (command?.type === 'jump-percent' && typeof command.percent === 'number') {
+      const percent = clampNumber(command.percent, 0, 100)
+      const totalChars = readerStore.chapters.reduce((sum, ch) => sum + ch.content.length, 0)
+      if (totalChars > 0) {
+        const targetChar = Math.round((percent / 100) * totalChars)
+        let accumulated = 0
+        let targetChapter = 0
+        for (let i = 0; i < readerStore.chapters.length; i++) {
+          const chapterLen = readerStore.chapters[i].content.length
+          if (accumulated + chapterLen >= targetChar) {
+            targetChapter = i
+            break
+          }
+          accumulated += chapterLen
+          targetChapter = i
+        }
+        const charInChapter = Math.max(0, Math.min(targetChar - accumulated, readerStore.chapters[targetChapter]?.content.length ?? 0))
+        readerStore.goToProgress(targetChapter, charInChapter)
+        saveReadingProgress()
+      }
+    }
     return
   }
   if (command === 'prev') { readerStore.prevPage(); saveReadingProgress() }
@@ -498,6 +516,10 @@ function handleHushreaderCommand(command: HushreaderCommand) {
   else if (command === 'hide') hideHushreaderWindow()
   else if (command === 'close') closePlugin()
   else if (command === 'auto') toggleAutoPaging()
+  else if (command === 'close-reader') { isReaderHidden.value = true; blurHushreaderKeyboard() }
+  else if (command === 'show-main') { (window as any).ztools?.showMainWindow?.() }
+  else if (command === 'stop-auto') { isAutoPaging.value = false; hushreaderCfg.value.autoFlipEnabled = false }
+  else if (command === 'start-auto') { if (currentBook.value) { isAutoPaging.value = true; hushreaderCfg.value.autoFlipEnabled = true } }
 }
 
 watch(
@@ -576,14 +598,17 @@ watch(
     hushreaderCfg.value.showHushreaderMeta,
     hushreaderCfg.value.progressMode,
     hushreaderCfg.value.hideOnMouseLeave,
+    hushreaderCfg.value.mouseEnterDelay,
     hushreaderCfg.value.wheelTurnPage,
     hushreaderCfg.value.bgColor,
-    hushreaderCfg.value.textColor
+    hushreaderCfg.value.textColor,
+    hushreaderCfg.value.autoFlipEnabled,
+    hushreaderCfg.value.fontFamily
   ],
   () => {
     nextTick(() => {
       if (hushreaderActivated.value && currentBook.value) {
-        ensureHushreaderWindow()
+        ensureHushreaderWindow({ skipShow: true })
       } else {
         pushHushreaderState()
       }

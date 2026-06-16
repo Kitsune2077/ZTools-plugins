@@ -314,10 +314,19 @@ function commitCapture(targetArr: string[]) {
 
           <div class="setting-row">
             <label>鼠标移出隐藏</label>
-            <label class="toggle">
-              <input type="checkbox" v-model="cfg.hushreader.hideOnMouseLeave" />
-              <span class="toggle-track"></span>
-            </label>
+            <select v-model="cfg.hushreader.hideOnMouseLeave" class="select">
+              <option value="off">不隐藏</option>
+              <option value="show-progress">快速隐藏但显示进度</option>
+              <option value="hide-all">快速隐藏且不显示进度</option>
+            </select>
+          </div>
+
+          <div class="setting-row" v-if="cfg.hushreader.hideOnMouseLeave !== 'off'">
+            <label>移入显示延迟</label>
+            <div class="input-group">
+              <input type="number" min="0" max="10" step="0.1" v-model.number="cfg.hushreader.mouseEnterDelay" class="number-input" />
+              <span class="unit">秒</span>
+            </div>
           </div>
 
           <div class="setting-row">

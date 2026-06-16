@@ -6,7 +6,8 @@ export interface HushreaderConfig {
   hushreaderHeight: number
   hushreaderX: number
   hushreaderY: number
-  hideOnMouseLeave: boolean
+  hideOnMouseLeave: 'off' | 'show-progress' | 'hide-all'
+  mouseEnterDelay: number
   showHushreaderMeta: boolean
   wheelTurnPage: boolean
   prevPageKey: string
@@ -73,7 +74,8 @@ const DEFAULT_CONFIG: ReaderConfig = {
     hushreaderHeight: 100,
     hushreaderX: 0,
     hushreaderY: 0,
-    hideOnMouseLeave: true,
+    hideOnMouseLeave: 'hide-all',
+    mouseEnterDelay: 0,
     showHushreaderMeta: true,
     wheelTurnPage: true,
     prevPageKey: 'ArrowLeft',
@@ -161,6 +163,11 @@ export const useConfigStore = defineStore('config', () => {
     if (data) {
       try {
         const saved = JSON.parse(data)
+        if (saved?.hushreader?.hideOnMouseLeave === true) {
+          saved.hushreader.hideOnMouseLeave = 'hide-all'
+        } else if (saved?.hushreader?.hideOnMouseLeave === false) {
+          saved.hushreader.hideOnMouseLeave = 'off'
+        }
         config.value = deepMerge(structuredClone(DEFAULT_CONFIG), saved)
       } catch { }
     }

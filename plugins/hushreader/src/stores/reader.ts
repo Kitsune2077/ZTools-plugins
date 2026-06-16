@@ -56,7 +56,7 @@ export const useReaderStore = defineStore('reader', () => {
       .slice(0, currentChapterIndex.value)
       .reduce((sum, ch) => sum + ch.content.length, 0)
       + progressIndex.value
-    return Math.min(100, Math.round((readChars / totalChars) * 100))
+    return Math.min(100, Math.floor((readChars / totalChars) * 10000) / 100)
   })
 
   function setChapters(chs: Chapter[]) {
