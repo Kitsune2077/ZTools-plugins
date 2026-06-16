@@ -108,7 +108,7 @@ npm run build    # 构建生产版本
 
 ```
 ├── public/
-│   ├── hushreader.html           # 沉浸式阅读窗口
+│   ├── hushreader.html           # 隐阅窗口
 │   ├── plugin.json               # ZTools 插件配置
 │   ├── logo.png                  # 插件图标
 │   └── preload/

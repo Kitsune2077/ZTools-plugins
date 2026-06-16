@@ -1,6 +1,18 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [1.2.0](https://github.com/ZToolsCenter/ZTools-plugins) - 2026-06-16
+
+### Fixed
+- **移除大体积缓存，改为实时解析**：EPUB 封面和章节内容不再持久化到 dbStorage，改为每次需要时从文件实时解析，彻底解决存储空间溢出导致书籍丢失的问题
+  - 封面图（coverImage/customCoverImage）仅在内存中保留，不写入存储；书架加载时异步从 EPUB 文件解析封面
+  - 章节内容不再缓存到 `hushreader_chapters_*`，每次打开书籍时实时解析
+  - 移除 `hushreader_cover_*` / `hushreader_custom_cover_*` / `hushreader_chapters_*` 等存储 key 的读写
+  - dbStorage 中仅保留轻量数据：书籍列表（不含封面）、阅读进度、配置
+
+### Added
+- **显示纯色封面选项**：其他设置中新增"显示纯色封面"开关，开启后 EPUB 不再解析封面图片，所有书籍使用纯色背景封面，节省性能消耗
+
 ## [1.1.1](https://github.com/ZToolsCenter/ZTools-plugins) - 2026-06-16
 
 ### Fixed

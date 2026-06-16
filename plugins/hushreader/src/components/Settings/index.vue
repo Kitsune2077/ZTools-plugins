@@ -163,7 +163,7 @@ function commitCapture(targetArr: string[]) {
 
       <!-- Tabs -->
       <div class="tab-bar">
-        <button class="tab-btn" :class="{ active: activeTab === 'hushreader' }" @click="activeTab = 'hushreader'">阅读窗口</button>
+        <button class="tab-btn" :class="{ active: activeTab === 'hushreader' }" @click="activeTab = 'hushreader'">隐阅窗口</button>
         <button class="tab-btn" :class="{ active: activeTab === 'function' }" @click="activeTab = 'function'">功能设置</button>
         <button class="tab-btn" :class="{ active: activeTab === 'other' }" @click="activeTab = 'other'">其他设置</button>
       </div>
@@ -171,7 +171,7 @@ function commitCapture(targetArr: string[]) {
       <!-- Body -->
       <div class="settings-body">
 
-        <!-- ===== 沉浸式阅读窗口 ===== -->
+        <!-- ===== 隐阅窗口 ===== -->
         <div v-if="activeTab === 'hushreader'" class="settings-grid">
 
           <div class="section-label">字体</div>
@@ -430,6 +430,16 @@ function commitCapture(targetArr: string[]) {
               <span class="toggle-track"></span>
             </label>
           </div>
+
+          <div class="setting-row">
+            <label>显示纯色封面</label>
+            <label class="toggle">
+              <input type="checkbox" v-model="cfg.other.plainTextCover" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+          <p v-if="!cfg.other.plainTextCover" class="hint" style="margin: -2px 0 6px; padding-left: 0">关闭时 EPUB 书籍将解析封面图片，可能消耗较多资源</p>
+          <p v-else class="hint" style="margin: -2px 0 6px; padding-left: 0">所有书籍使用纯色背景封面，不解析 EPUB 封面图片</p>
 
           <div class="divider"></div>
           <div class="section-label">解析</div>

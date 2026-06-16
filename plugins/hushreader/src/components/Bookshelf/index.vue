@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, inject, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, inject, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useBookStore } from '../../stores/books'
 import { useConfigStore } from '../../stores/config'
 import { useReaderStore } from '../../stores/reader'
@@ -22,7 +22,7 @@ const hideHushreaderWindow = inject<() => void>('hideHushreaderWindow')
 
 function handleHideHushreaderWindow() {
   hideHushreaderWindow?.()
-  toast('阅读窗口已关闭', 'success')
+  toast('隐阅窗口已关闭', 'success')
 }
 
 const showSettings = ref(false)
@@ -224,7 +224,7 @@ function openCoverPicker(bookId: string) {
 
 async function repairCover(bookId: string) {
   const book = bookStore.books.find(b => b.id === bookId)
-  if (!book || book.format !== 'epub') {
+  if (!book || book.format !== 'epub' || configStore.config.other.plainTextCover) {
     bookStore.updateBook(bookId, { coverImage: undefined })
     return
   }
@@ -291,7 +291,7 @@ async function importBook(filePath: string) {
           const result = await parseEpub(file)
           title = result.title || title
           author = result.author || ''
-          if (result.coverUrl) coverImage = result.coverUrl
+          if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
         }
       } catch {}
     }
@@ -375,6 +375,38 @@ function randomCoverColor(): string {
   return colors[Math.floor(Math.random() * colors.length)]
 }
 
+async function resolveEpubCovers() {
+  if (configStore.config.other.plainTextCover) return
+  const epubBooks = bookStore.books.filter(b => b.format === 'epub' && !b.coverImage && !b.customCoverImage)
+  for (const book of epubBooks) {
+    try {
+      const content = window.services?.readFileBinary?.(book.filePath)
+      if (!content) continue
+      const blob = new Blob([content], { type: 'application/epub+zip' })
+      const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.epub')
+      const result = await parseEpub(file)
+      if (result.coverUrl) {
+        book.coverImage = result.coverUrl
+      }
+    } catch {}
+  }
+}
+
+watch(() => bookStore.books.length, () => {
+  resolveEpubCovers()
+}, { immediate: true })
+
+watch(() => configStore.config.other.plainTextCover, (plain) => {
+  if (plain) {
+    bookStore.books.forEach(b => {
+      b.coverImage = undefined
+      b.customCoverImage = undefined
+    })
+  } else {
+    resolveEpubCovers()
+  }
+})
+
 const cfg = computed(() => configStore.config)
 </script>
 
@@ -394,7 +426,7 @@ const cfg = computed(() => configStore.config)
         />
       </div>
       <div class="shelf-actions">
-        <button class="icon-btn" title="关闭阅读窗口" @click="handleHideHushreaderWindow">
+        <button class="icon-btn" title="关闭隐阅窗口" @click="handleHideHushreaderWindow">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
             <line x1="1" y1="1" x2="23" y2="23"/>

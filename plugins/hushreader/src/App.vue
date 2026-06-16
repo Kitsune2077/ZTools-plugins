@@ -350,37 +350,11 @@ function saveReadingProgress() {
   })
 }
 
-function getChapterCacheKey(bookId: string): string {
-  return `hushreader_chapters_${bookId}`
-}
-
 function getFileModifiedTime(filePath: string): number | null {
   try {
     return (window as any).services?.getFileModifiedTime?.(filePath) ?? null
   } catch {
     return null
-  }
-}
-
-async function loadChaptersFromCache(bookId: string): Promise<any[] | null> {
-  try {
-    const zStorage = (window as any).ztools?.dbStorage
-    const storage = zStorage?.getItem ? zStorage : window.localStorage
-    const data = storage.getItem(getChapterCacheKey(bookId))
-    if (!data) return null
-    return JSON.parse(data)
-  } catch {
-    return null
-  }
-}
-
-async function saveChaptersToCache(bookId: string, chapters: any[]) {
-  try {
-    const zStorage = (window as any).ztools?.dbStorage
-    const storage = zStorage?.setItem ? zStorage : window.localStorage
-    storage.setItem(getChapterCacheKey(bookId), JSON.stringify(chapters))
-  } catch {
-    console.warn('Failed to save chapters cache')
   }
 }
 
@@ -411,15 +385,11 @@ async function openBookAndHushreader(bookId: string) {
   readerStore.isLoading = true
 
   try {
-    const currentModified = getFileModifiedTime(book.filePath)
-    const cacheChapters = await loadChaptersFromCache(bookId)
+    const chapters = await parseBookAndGetChapters(book)
+    readerStore.setChapters(chapters)
 
-    if (cacheChapters && cacheChapters.length > 0 && currentModified === book.fileModifiedAt) {
-      readerStore.setChapters(cacheChapters)
-    } else {
-      const chapters = await parseBookAndGetChapters(book)
-      readerStore.setChapters(chapters)
-      await saveChaptersToCache(bookId, chapters)
+    const currentModified = getFileModifiedTime(book.filePath)
+    if (currentModified !== book.fileModifiedAt) {
       bookStore.updateBook(bookId, { fileModifiedAt: currentModified })
     }
 

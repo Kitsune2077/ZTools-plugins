@@ -49,18 +49,6 @@ function storageSet(key: string, value: string) {
   } catch { }
 }
 
-function storageRemove(key: string) {
-  try {
-    const zStorage = (window as any).ztools?.dbStorage
-    if (zStorage?.removeItem) {
-      zStorage.removeItem(key)
-    }
-  } catch { }
-  try {
-    window.localStorage.removeItem(key)
-  } catch { }
-}
-
 export const useBookStore = defineStore('books', () => {
   const books = ref<Book[]>([])
   const currentBookId = ref<string | null>(null)
@@ -74,13 +62,14 @@ export const useBookStore = defineStore('books', () => {
       if (data) {
         const parsed = JSON.parse(data)
         if (Array.isArray(parsed)) {
-          // 兼容旧数据：将单分类字段 category 迁移到 categories 数组
           parsed.forEach((b: any) => {
             if (b.category && !b.categories) {
               b.categories = [b.category]
               delete b.category
             }
             if (!Array.isArray(b.categories)) b.categories = []
+            delete b.coverImage
+            delete b.customCoverImage
           })
           books.value = parsed
         }
@@ -94,7 +83,11 @@ export const useBookStore = defineStore('books', () => {
 
   function save() {
     try {
-      storageSet('hushreader_books', JSON.stringify(books.value))
+      const stripped = books.value.map(b => {
+        const { coverImage, customCoverImage, ...rest } = b
+        return rest as any
+      })
+      storageSet('hushreader_books', JSON.stringify(stripped))
     } catch (e) {
       console.warn('Failed to save books', e)
     }
@@ -115,7 +108,6 @@ export const useBookStore = defineStore('books', () => {
   function removeBook(id: string) {
     books.value = books.value.filter(b => b.id !== id)
     if (currentBookId.value === id) currentBookId.value = null
-    storageRemove(`hushreader_chapters_${id}`)
     save()
   }
 
