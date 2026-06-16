@@ -653,12 +653,10 @@
 
     function sendMovePreview(x, y) {
       currentMovePosition = normalizeMovePosition(x, y)
+      pendingMove = currentMovePosition
 
-      sendCommand({
-        type: "move-preview",
-        x: currentMovePosition.x,
-        y: currentMovePosition.y
-      })
+      if (moveFrame) return
+      moveFrame = requestAnimationFrame(flushMovePreview)
     }
 
     function flushMovePreview() {

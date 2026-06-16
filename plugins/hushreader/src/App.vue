@@ -212,16 +212,18 @@ function getHushreaderPayload(bounds = getHushreaderWindowBounds()) {
   }
 }
 
-function applyHushreaderWindowBounds(bounds: HushreaderBounds) {
+function applyHushreaderWindowBounds(bounds: HushreaderBounds, positionOnly = false) {
   if (!hushreaderWindow || hushreaderWindow.isDestroyed?.()) return
   hushreaderWindowAnchor = { x: bounds.x, y: bounds.y }
   hushreaderWindow.setContentBounds?.(bounds)
   hushreaderWindow.setContentSize?.(bounds.width, bounds.height)
   hushreaderWindow.setSize?.(bounds.width, bounds.height)
   hushreaderWindow.setPosition?.(bounds.x, bounds.y)
-  hushreaderWindow.setAlwaysOnTop?.(true)
-  hushreaderWindow.setSkipTaskbar?.(true)
-  hushreaderWindow.moveTop?.()
+  if (!positionOnly) {
+    hushreaderWindow.setAlwaysOnTop?.(true)
+    hushreaderWindow.setSkipTaskbar?.(true)
+    hushreaderWindow.moveTop?.()
+  }
 }
 
 function positionHushreaderWindow() {
@@ -448,7 +450,6 @@ function resizeHushreaderWindow(width: number, height: number) {
   hushreaderCfg.value.hushreaderHeight = size.height
   positionHushreaderWindow()
   updateHushreaderLayout()
-  nextTick(pushHushreaderState)
   configStore.save()
 }
 
@@ -458,18 +459,17 @@ function moveHushreaderWindow(x: number, y: number) {
   hushreaderCfg.value.hushreaderX = bounds.x
   hushreaderCfg.value.hushreaderY = bounds.y
   applyHushreaderWindowBounds(bounds)
-  nextTick(pushHushreaderState)
   configStore.save()
 }
 
 function previewHushreaderWindowSize(width: number, height: number) {
   if (!hushreaderWindow || hushreaderWindow.isDestroyed?.() || !Number.isFinite(width) || !Number.isFinite(height)) return
-  applyHushreaderWindowBounds(getAnchoredHushreaderWindowBoundsForSize(width, height))
+  applyHushreaderWindowBounds(getAnchoredHushreaderWindowBoundsForSize(width, height), true)
 }
 
 function previewHushreaderWindowPosition(x: number, y: number) {
   if (!hushreaderWindow || hushreaderWindow.isDestroyed?.() || !Number.isFinite(x) || !Number.isFinite(y)) return
-  applyHushreaderWindowBounds(getMovedHushreaderWindowBounds(x, y))
+  applyHushreaderWindowBounds(getMovedHushreaderWindowBounds(x, y), true)
 }
 
 function handleHushreaderCommand(command: HushreaderCommand) {

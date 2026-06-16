@@ -1,6 +1,10 @@
 # Changelog
 
 All notable changes to this project will be documented in this file.
+## [1.1.1](https://github.com/ZToolsCenter/ZTools-plugins) - 2026-06-16
+
+### Fixed
+- **窗口拖动/拉伸卡顿**：修复移动和拉伸阅读窗口时严重卡顿的问题——移动预览未做帧节流、预览期间重复调用 `setAlwaysOnTop`/`moveTop` 等重操作、提交时重复推送状态
 
 ## [1.1.0](https://github.com/ZToolsCenter/ZTools-plugins) - 2026-06-16
 
@@ -13,6 +17,7 @@ All notable changes to this project will be documented in this file.
 - **百分比进度精度**：阅读百分比从整数改为精确到小数点后两位（如 11.45%）
 - **字体设置不生效**：修复字体选择和自定义字体在沉浸式阅读窗口中不生效的问题——`fontFamily` 未传递至阅读窗口且阅读窗口使用硬编码字体
 - **删除书籍数据残留**：修复删除书籍后未清除 `dbStorage` 中对应章节缓存数据的问题
+
 
 ### Changed
 - **章节列表高亮当前进度**：打开章节列表时自动高亮当前阅读进度所在章节，并滚动到该章节位置
