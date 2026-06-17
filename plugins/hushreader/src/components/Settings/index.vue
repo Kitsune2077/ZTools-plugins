@@ -235,7 +235,7 @@ function commitCapture(targetArr: string[]) {
           <div class="setting-row">
             <label>窗口高度</label>
             <div class="input-group">
-              <input type="range" min="22" max="160" v-model.number="cfg.hushreader.hushreaderHeight" class="slider" />
+              <input type="range" min="22" max="500" v-model.number="cfg.hushreader.hushreaderHeight" class="slider" />
               <span class="badge">{{ cfg.hushreader.hushreaderHeight }}px</span>
             </div>
           </div>
@@ -394,25 +394,17 @@ function commitCapture(targetArr: string[]) {
           <div class="section-label">阅读功能</div>
 
           <div class="setting-row">
-            <label>分页模式</label>
-            <select v-model="cfg.function.pageMode" class="select">
-              <option value="adaptive">自适应（按窗口高度）</option>
-              <option value="fixed">固定行数</option>
-            </select>
-          </div>
-
-          <div class="setting-row" v-if="cfg.function.pageMode === 'fixed'">
-            <label>每页行数</label>
-            <div class="input-group">
-              <input type="number" min="1" max="30" v-model.number="cfg.function.pageLines" class="number-input" />
-              <span class="unit">行</span>
-            </div>
-          </div>
-
-          <div class="setting-row">
             <label>窗口可拖动</label>
             <label class="toggle">
               <input type="checkbox" v-model="cfg.function.windowMovable" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <label>窗口大小锁定</label>
+            <label class="toggle">
+              <input type="checkbox" v-model="cfg.function.windowSizeLocked" />
               <span class="toggle-track"></span>
             </label>
           </div>

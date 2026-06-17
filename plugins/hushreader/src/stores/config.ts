@@ -39,8 +39,6 @@ export interface AppearanceConfig {
 }
 
 export interface FunctionConfig {
-  pageMode: 'adaptive' | 'fixed'
-  pageLines: number
   scrollWheelEnabled: boolean
   scrollWheelDelay: number
   nextPageKeys: string[]
@@ -51,6 +49,7 @@ export interface FunctionConfig {
   autoFlipInterval: number
   mouseHideEnabled: boolean
   windowMovable: boolean
+  windowSizeLocked: boolean
 }
 
 export interface OtherConfig {
@@ -95,8 +94,6 @@ const DEFAULT_CONFIG: ReaderConfig = {
     progressMode: 'percent'
   },
   function: {
-    pageMode: 'adaptive',
-    pageLines: 5,
     scrollWheelEnabled: true,
     scrollWheelDelay: 300,
     nextPageKeys: ['ArrowRight', 'PageDown'],
@@ -106,7 +103,8 @@ const DEFAULT_CONFIG: ReaderConfig = {
     autoFlipEnabled: false,
     autoFlipInterval: 5000,
     mouseHideEnabled: true,
-    windowMovable: true
+    windowMovable: true,
+    windowSizeLocked: false
   },
   other: {
     configName: '配置',

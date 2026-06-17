@@ -36,7 +36,7 @@ type AppBrowserWindow = {
 const FISH_MIN_WIDTH = 280
 const FISH_MAX_WIDTH = 1180
 const FISH_MIN_HEIGHT = 22
-const FISH_MAX_HEIGHT = 160
+const FISH_MAX_HEIGHT = 500
 const FISH_META_ROW_HEIGHT = 18
 const FISH_SIDE_CONTROLS_WIDTH = 44
 const FISH_CONTENT_PADDING = 20
@@ -213,7 +213,9 @@ function getHushreaderPayload(bounds = getHushreaderWindowBounds()) {
       bgColor: hushreaderCfg.value.bgColor,
       textColor: hushreaderCfg.value.textColor,
       autoFlipEnabled: hushreaderCfg.value.autoFlipEnabled,
-      fontFamily: hushreaderCfg.value.fontFamily
+      fontFamily: hushreaderCfg.value.fontFamily,
+      windowMovable: cfg.value.function.windowMovable,
+      windowSizeLocked: cfg.value.function.windowSizeLocked
     }
   }
 }
@@ -607,7 +609,9 @@ watch(
     hushreaderCfg.value.bgColor,
     hushreaderCfg.value.textColor,
     hushreaderCfg.value.autoFlipEnabled,
-    hushreaderCfg.value.fontFamily
+    hushreaderCfg.value.fontFamily,
+    cfg.value.function.windowMovable,
+    cfg.value.function.windowSizeLocked
   ],
   () => {
     nextTick(() => {

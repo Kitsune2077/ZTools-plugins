@@ -2,11 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.1](https://github.com/me1dlinger/hushreader/releases/tag/v1.3.1) - 2026-06-17
+
+### Added
+- **窗口大小锁定开关**：功能设置中新增"窗口大小锁定"开关，开启后窗口不允许拉伸调整大小
+
+### Fixed
+- **窗口可拖动开关生效**：修复关闭"窗口可拖动"后窗口仍可拖动的问题，关闭后拖动区域 cursor 变为 default
+
+### Removed
+- **固定行数分页模式**：移除分页模式中的"固定行数"选项，统一使用自适应模式
+
+
 ## [1.3.0](https://github.com/me1dlinger/hushreader/releases/tag/v1.3.0) - 2026-06-17
 
 ### Added
 - **MOBI 格式支持**：新增 MOBI 电子书格式的解析和阅读功能
-- **MOBI 加密文件解密**：支持加密 MOBI 文件的解析和阅读
 - **主题模式切换**：新增"主题模式"切换
 
 ### Changed
