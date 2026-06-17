@@ -99,8 +99,22 @@ function applyHeight(): void {
 }
 
 async function select(item: RecentItem): Promise<void> {
-  const r = await (window as any).recentApi.open(item);
+  // KEEP-IN-SYNC with src/select-actions.ts:decideSelectActions — the
+  // sandboxed plugin view has no module loader so the policy lives inline
+  // here AND as a pure function in src/ (tested). When you change one,
+  // change the other.
+  let r: { ok: boolean; reason?: string };
+  try {
+    r = await (window as any).recentApi.open(item);
+  } catch (e) {
+    ztools.showNotification(
+      '启动 VSCode 失败（IPC 异常）：' + (e instanceof Error ? e.message : String(e))
+    );
+    return;
+  }
   if (r.ok) {
+    // 关闭 ztool 主窗口（不仅退出插件视图），让用户专注于刚启动的 VSCode
+    ztools.hideMainWindow?.(false);
     ztools.outPlugin();
   } else {
     ztools.showNotification(
