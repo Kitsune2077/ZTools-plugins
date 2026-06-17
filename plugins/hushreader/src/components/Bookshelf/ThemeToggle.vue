@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useConfigStore } from '../../stores/config'
 
 const configStore = useConfigStore()
@@ -7,15 +7,12 @@ const isDark = computed(() => configStore.config.other.theme === 'dark')
 
 function toggle() {
   configStore.config.other.theme = isDark.value ? 'light' : 'dark'
-  applyTheme()
   configStore.save()
 }
 
-function applyTheme() {
-  document.documentElement.setAttribute('data-theme', configStore.config.other.theme)
-}
-
-applyTheme()
+watch(() => configStore.config.other.theme, (theme) => {
+  document.documentElement.setAttribute('data-theme', theme)
+}, { immediate: true })
 </script>
 
 <template>

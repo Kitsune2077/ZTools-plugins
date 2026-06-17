@@ -227,6 +227,7 @@ function extractCoverUrl(
     const coverRecord = findExthRecord(exthRecords, 201)
     if (!coverRecord) return undefined
 
+    if (firstImageIndex === 0xffffffff) return undefined
     const coverRecordIndex = firstImageIndex + exthRawToUint(coverRecord.raw)
     const start = recordOffsets[coverRecordIndex]
     const end = recordOffsets[coverRecordIndex + 1] ?? data.length
@@ -307,8 +308,8 @@ function stripHtmlTags(html: string): string {
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
     .replace(/&quot;/gi, '"')
-    .replace(/&#(\d+);/gi, (_, code) => String.fromCharCode(parseInt(code)))
-    .replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/gi, (_, hex) => String.fromCodePoint(parseInt(hex, 16)))
     .replace(/<[^>]+>/g, '')
   return text
 }
@@ -396,6 +397,9 @@ export async function parseMobi(file: File): Promise<{
   }
 
   const firstRecordOffset = recordOffsets[0]
+  if (firstRecordOffset + 16 > data.length) {
+    return { title: '', author: '', chapters: [], error: 'MOBI文件格式损坏或记录偏移越界' }
+  }
   const palmDocHeader = parsePalmDocHeader(data, firstRecordOffset)
   const mobiHeader = parseMobiHeader(data, firstRecordOffset)
 

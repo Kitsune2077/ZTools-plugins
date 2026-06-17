@@ -326,6 +326,7 @@ async function importBook(filePath: string) {
           if (result.error) { toast(`MOBI解析失败：${result.error}`, 'error'); return }
           title = result.title || title
           author = result.author || ''
+          if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
         }
       } catch (e: any) {
         toast(`MOBI导入失败：${e.message}`, 'error'); return
@@ -445,7 +446,7 @@ watch(() => configStore.config.other.plainTextCover, async (plain) => {
       b.coverImage = undefined
       b.customCoverImage = undefined
     }
-    await Promise.allSettled(bookStore.books.map(b => removeBookData(b.id)))
+    await Promise.allSettled(bookStore.books.flatMap(b => [removeCover(b.id), removeCustomCover(b.id)]))
   } else {
     resolveEpubCovers()
   }

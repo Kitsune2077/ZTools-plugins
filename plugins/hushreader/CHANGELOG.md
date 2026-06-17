@@ -9,6 +9,12 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 - **窗口可拖动开关生效**：修复关闭"窗口可拖动"后窗口仍可拖动的问题，关闭后拖动区域 cursor 变为 default
+- **ThemeToggle 主题未随配置加载更新**：改用 `watch` + `immediate: true` 替代直接调用 `applyTheme()`，确保配置异步加载后主题也能正确应用
+- **纯色封面时误清章节缓存**：开启"显示纯色封面"时仅清除封面和自定义封面缓存，不再误删章节缓存
+- **MOBI 导入 coverUrl 未赋值**：MOBI 解析成功后将 coverUrl 赋值给 coverImage
+- **MOBI recordOffsets 边界检查**：增加 `firstRecordOffset + 16 > data.length` 检查，防止格式损坏文件导致越界
+- **MOBI firstImageIndex 为 0xffffffff 时封面索引错误**：在 extractCoverUrl 中判断 firstImageIndex 无效值，避免错误计算封面记录索引
+- **HTML 实体解码 fromCharCode → fromCodePoint**：`&#xxx;` 和 `&#xHH;` 解码改用 `String.fromCodePoint`，parseInt 增加 radix 参数，支持 BMP 外字符
 
 ### Removed
 - **固定行数分页模式**：移除分页模式中的"固定行数"选项，统一使用自适应模式
