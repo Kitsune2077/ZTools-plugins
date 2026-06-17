@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
+import { removeBookData, loadAllCovers } from '../utils/db'
 
 export interface Book {
   id: string
   title: string
   author: string
-  format: 'epub' | 'txt'
+  format: 'epub' | 'txt' | 'mobi'
   filePath: string
   coverColor?: string
   coverImage?: string
@@ -56,7 +57,7 @@ export const useBookStore = defineStore('books', () => {
   const searchQuery = ref('')
   const activeCategory = ref<string>('全部')
 
-  function load() {
+  async function load() {
     try {
       const data = storageGet('hushreader_books')
       if (data) {
@@ -72,6 +73,15 @@ export const useBookStore = defineStore('books', () => {
             delete b.customCoverImage
           })
           books.value = parsed
+          const ids = parsed.map((b: any) => b.id as string).filter(Boolean)
+          if (ids.length) {
+            const covers = await loadAllCovers(ids)
+            for (const book of books.value) {
+              const c = covers[book.id]
+              if (c?.cover) book.coverImage = c.cover
+              if (c?.customCover) book.customCoverImage = c.customCover
+            }
+          }
         }
       }
       const cur = storageGet('hushreader_current')
@@ -109,6 +119,7 @@ export const useBookStore = defineStore('books', () => {
     books.value = books.value.filter(b => b.id !== id)
     if (currentBookId.value === id) currentBookId.value = null
     save()
+    removeBookData(id).catch(() => {})
   }
 
   function updateBook(id: string, updates: Partial<Book>) {

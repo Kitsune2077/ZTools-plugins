@@ -139,13 +139,13 @@ function progressText(book: Book): string {
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 1.5px;
-  color: rgba(255,255,255,0.6);
+  color: var(--c-cover-text-muted);
   text-transform: uppercase;
 }
 
 .cover-title {
   font-size: 11px;
-  color: #fff;
+  color: var(--c-cover-text);
   text-align: center;
   line-height: 1.35;
   overflow: hidden;
@@ -161,7 +161,7 @@ function progressText(book: Book): string {
   left: 0;
   right: 0;
   height: 20px;
-  background: rgba(0,0,0,0.5);
+  background: var(--c-progress-bg);
   display: flex;
   align-items: center;
   overflow: hidden;
@@ -172,7 +172,7 @@ function progressText(book: Book): string {
   left: 0;
   top: 0;
   bottom: 0;
-  background: rgba(255,255,255,0.12);
+  background: var(--c-progress-bar);
   transition: width 0.3s var(--ease-out);
 }
 
@@ -182,7 +182,7 @@ function progressText(book: Book): string {
   width: 100%;
   text-align: center;
   font-size: 9px;
-  color: rgba(255,255,255,0.9);
+  color: var(--c-progress-label);
   font-variant-numeric: tabular-nums;
   font-family: var(--font-mono);
 }

@@ -500,7 +500,7 @@ function commitCapture(targetArr: string[]) {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(28, 25, 23, 0.3);
+  background: var(--c-overlay-bg);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -824,7 +824,7 @@ function commitCapture(targetArr: string[]) {
 .confirm-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(28, 25, 23, 0.3);
+  background: var(--c-overlay-bg);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;

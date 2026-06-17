@@ -59,6 +59,7 @@ export interface OtherConfig {
   listMode: boolean
   chapterRegex: string
   customFonts: string[]
+  theme: 'light' | 'dark'
 }
 
 export interface ReaderConfig {
@@ -112,7 +113,8 @@ const DEFAULT_CONFIG: ReaderConfig = {
     plainTextCover: false,
     listMode: false,
     chapterRegex: '',
-    customFonts: []
+    customFonts: [],
+    theme: 'light'
   },
   appearance: {
     fontSize: 16,
