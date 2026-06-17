@@ -114,6 +114,117 @@ h2 {
   flex: none;
 }
 
+.split-create-group {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.split-create-main,
+.split-create-arrow {
+  height: 36px;
+  border: 1px solid rgba(32, 114, 116, 0.16);
+  background: #ffffff;
+  color: var(--text-color, #1d2430);
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.split-create-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.split-create-arrow {
+  width: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0 8px 8px 0;
+  cursor: pointer;
+}
+
+.split-create-main:hover,
+.split-create-arrow:hover,
+.split-create-arrow.active {
+  border-color: rgba(32, 114, 116, 0.28);
+  background: #f6fbfb;
+  color: #207274;
+}
+
+.split-create-main:focus-visible,
+.split-create-arrow:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(32, 114, 116, 0.14);
+}
+
+.split-create-arrow:disabled,
+.split-create-main:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.create-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 152px;
+  padding: 4px;
+  border: 1px solid rgba(30, 42, 56, 0.12);
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 8px 20px rgba(30, 42, 56, 0.10);
+  z-index: 24;
+}
+
+.create-dropdown-item {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-color, #1d2430);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.create-dropdown-item:hover:not(:disabled) {
+  background: #f3f8f8;
+  color: #207274;
+}
+
+.create-dropdown-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.dropdown-enter-active,
+.dropdown-leave-active {
+  transition:
+    opacity 0.14s ease,
+    transform 0.14s ease;
+}
+
+.dropdown-enter-from,
+.dropdown-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
 .content-area {
   flex: 1;
   min-height: 0;
@@ -373,7 +484,10 @@ h2 {
 
 .dark .icon-button,
 .dark .segmented button.active,
-.dark .notice {
+.dark .notice,
+.dark .create-dropdown,
+.dark .split-create-main,
+.dark .split-create-arrow {
   background: #20252c;
 }
 

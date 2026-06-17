@@ -19,6 +19,16 @@ declare global {
     error?: string
   }
 
+  interface WebQuickOpenImportResult {
+    success: boolean
+    importedCount?: number
+    skippedCount?: number
+    duplicateCount?: number
+    invalidCount?: number
+    totalCount?: number
+    error?: string
+  }
+
   interface LaunchParam {
     code?: string
     type?: string
@@ -35,6 +45,7 @@ declare global {
     update: (engine: WebSearchEngine) => Promise<WebSearchResult>
     delete: (engineId: string) => Promise<WebSearchResult>
     fetchFavicon: (url: string) => Promise<WebSearchResult<string>>
+    importFromJsonText: (jsonText: string) => Promise<WebQuickOpenImportResult>
     openExternal: (url: string) => unknown
     hideMainWindow: () => unknown
     outPlugin: () => unknown

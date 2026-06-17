@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
   Download,
   ExternalLink,
   Globe,
@@ -51,6 +52,9 @@ const editingEngine = ref<WebSearchEngine | null>(null)
 const showEditor = ref(false)
 const notice = ref<{ type: NoticeType; text: string } | null>(null)
 const iconFileInput = ref<HTMLInputElement | null>(null)
+const importFileInput = ref<HTMLInputElement | null>(null)
+const importing = ref(false)
+const showCreateMenu = ref(false)
 let noticeTimer = 0
 
 const formData = ref<WebSearchEngine>(createEmptyEngine())
@@ -117,6 +121,7 @@ async function loadEngines(): Promise<void> {
 }
 
 function openAddEditor(): void {
+  showCreateMenu.value = false
   editingEngine.value = null
   formData.value = createEmptyEngine()
   showEditor.value = true
@@ -266,6 +271,57 @@ function pickIconFile(): void {
   iconFileInput.value?.click()
 }
 
+function pickImportFile(): void {
+  if (importing.value) return
+  showCreateMenu.value = false
+  importFileInput.value?.click()
+}
+
+function handleImportFileChange(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file || importing.value) return
+
+  importing.value = true
+  const reader = new FileReader()
+  reader.onload = async () => {
+    try {
+      if (typeof reader.result !== 'string') {
+        showNotice('error', '读取导入文件失败')
+        return
+      }
+
+      const result = await window.webQuickOpen.importFromJsonText(reader.result)
+      if (!result.success) {
+        showNotice('error', result.error || '导入失败')
+        return
+      }
+
+      await loadEngines()
+      if ((result.importedCount || 0) > 0) {
+        showNotice(
+          'success',
+          `已导入 ${result.importedCount} 条，跳过 ${result.skippedCount || 0} 条`
+        )
+        return
+      }
+
+      showNotice('info', '未导入新数据，可能已存在或格式无效')
+    } catch (error) {
+      console.error('[WebQuickOpen] import failed:', error)
+      showNotice('error', '导入失败')
+    } finally {
+      importing.value = false
+    }
+  }
+  reader.onerror = () => {
+    importing.value = false
+    showNotice('error', '读取导入文件失败')
+  }
+  reader.readAsText(file, 'utf-8')
+}
+
 function handleIconFileChange(event: Event): void {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -398,11 +454,20 @@ function openPreview(engine: WebSearchEngine): void {
   }
 }
 
+function handleDocumentClick(): void {
+  showCreateMenu.value = false
+}
+
 onMounted(() => {
   loadEngines()
+  document.addEventListener('click', handleDocumentClick)
   window.ztools?.onPluginEnter?.((param) => {
     void handlePluginEnter(param)
   })
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', handleDocumentClick)
 })
 </script>
 
@@ -422,18 +487,42 @@ onMounted(() => {
           </template>
         </ZInput>
         <div class="toolbar-actions">
-          <ZButton size="medium" :disabled="loading" @click="loadEngines">
+          <ZButton size="medium" :disabled="loading || importing" @click="loadEngines">
             <template #icon>
               <RotateCw :size="15" />
             </template>
             刷新
           </ZButton>
-          <ZButton type="primary" size="medium" @click="openAddEditor">
-            <template #icon>
+          <div class="split-create-group" @click.stop>
+            <button class="split-create-main" type="button" @click="openAddEditor">
               <Plus :size="15" />
-            </template>
-            添加
-          </ZButton>
+              <span>添加</span>
+            </button>
+            <button
+              class="split-create-arrow"
+              :class="{ active: showCreateMenu }"
+              type="button"
+              title="更多添加操作"
+              @click.stop="showCreateMenu = !showCreateMenu"
+            >
+              <ChevronDown :size="15" />
+            </button>
+            <Transition name="dropdown">
+              <div v-if="showCreateMenu" class="create-dropdown" @click.stop>
+                <button class="create-dropdown-item" :disabled="importing" @click="pickImportFile">
+                  <Download :size="15" />
+                  <span>{{ importing ? '导入中...' : '导入旧数据' }}</span>
+                </button>
+              </div>
+            </Transition>
+          </div>
+          <input
+            ref="importFileInput"
+            type="file"
+            accept=".json,application/json"
+            class="file-input"
+            @change="handleImportFileChange"
+          />
         </div>
       </div>
 

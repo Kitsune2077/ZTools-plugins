@@ -270,6 +270,110 @@ function guessIconContentType(url) {
   return 'image/x-icon'
 }
 
+function extractImportedEngineList(raw) {
+  if (Array.isArray(raw)) {
+    return { success: true, data: raw }
+  }
+  if (raw && typeof raw === 'object') {
+    if (Array.isArray(raw.data)) {
+      return { success: true, data: raw.data }
+    }
+    if (Array.isArray(raw.engines)) {
+      return { success: true, data: raw.engines }
+    }
+  }
+  return {
+    success: false,
+    error: '文件格式不正确，需为导出的文档对象或入口数组'
+  }
+}
+
+function normalizeImportedEngine(engine) {
+  const fallbackType = String(engine?.url || '').includes('{q}') ? 'search' : 'webpage'
+  const type = engine?.type === 'search' || engine?.type === 'webpage' ? engine.type : fallbackType
+  return normalizeEngine({
+    id: typeof engine?.id === 'string' ? engine.id : '',
+    name: typeof engine?.name === 'string' ? engine.name : '',
+    url: typeof engine?.url === 'string' ? engine.url : '',
+    icon: typeof engine?.icon === 'string' ? engine.icon : '',
+    enabled: typeof engine?.enabled === 'boolean' ? engine.enabled : true,
+    type,
+    keyword: typeof engine?.keyword === 'string' ? engine.keyword : ''
+  })
+}
+
+function buildEngineDedupKey(engine) {
+  const url = ensureUrlProtocol(String(engine.url || '').trim())
+  if (engine.type === 'search') {
+    return `search::${url.toLowerCase()}`
+  }
+  const keyword = String(engine.keyword || '').trim().toLowerCase()
+  return `webpage::${keyword}::${url.toLowerCase()}`
+}
+
+function importFromJsonText(jsonText) {
+  let parsed
+  try {
+    parsed = JSON.parse(jsonText)
+  } catch {
+    return { success: false, error: 'JSON 解析失败，请确认文件内容正确' }
+  }
+
+  const extracted = extractImportedEngineList(parsed)
+  if (!extracted.success) {
+    return extracted
+  }
+
+  const sourceItems = extracted.data
+  const existingEngines = getAllEngines()
+  const nextEngines = existingEngines.slice()
+  const existingKeys = new Set(existingEngines.map(buildEngineDedupKey))
+  const importedKeys = new Set()
+
+  let importedCount = 0
+  let duplicateCount = 0
+  let invalidCount = 0
+
+  for (const item of sourceItems) {
+    const normalized = normalizeImportedEngine(item)
+    const validated = validateEngine(normalized, false)
+    if (!validated.success) {
+      invalidCount++
+      continue
+    }
+
+    const candidate = {
+      ...validated.engine,
+      id: validated.engine.id || generateId()
+    }
+    const dedupKey = buildEngineDedupKey(candidate)
+
+    if (existingKeys.has(dedupKey) || importedKeys.has(dedupKey)) {
+      duplicateCount++
+      continue
+    }
+
+    existingKeys.add(dedupKey)
+    importedKeys.add(dedupKey)
+    nextEngines.push(candidate)
+    importedCount++
+  }
+
+  if (importedCount > 0) {
+    saveEngines(nextEngines)
+    syncEngineFeatures(nextEngines)
+  }
+
+  return {
+    success: true,
+    totalCount: sourceItems.length,
+    importedCount,
+    duplicateCount,
+    invalidCount,
+    skippedCount: duplicateCount + invalidCount
+  }
+}
+
 window.webQuickOpen = {
   async getAll() {
     const engines = getAllEngines()
@@ -322,6 +426,16 @@ window.webQuickOpen = {
       return {
         success: false,
         error: error instanceof Error ? error.message : '获取图标失败'
+      }
+    }
+  },
+  async importFromJsonText(jsonText) {
+    try {
+      return importFromJsonText(jsonText)
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '导入失败'
       }
     }
   },
