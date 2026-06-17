@@ -430,8 +430,8 @@ function commitCapture(targetArr: string[]) {
               <span class="toggle-track"></span>
             </label>
           </div>
-          <p v-if="!cfg.other.plainTextCover" class="hint" style="margin: -2px 0 6px; padding-left: 0">关闭时 EPUB 书籍将解析封面图片，可能消耗较多资源</p>
-          <p v-else class="hint" style="margin: -2px 0 6px; padding-left: 0">所有书籍使用纯色背景封面，不解析 EPUB 封面图片</p>
+          <p v-if="!cfg.other.plainTextCover" class="hint" style="margin: -2px 0 6px; padding-left: 0">关闭时书籍将解析封面图片，可能消耗较多资源</p>
+          <p v-else class="hint" style="margin: -2px 0 6px; padding-left: 0">所有书籍使用纯色背景封面，不解析封面图片</p>
 
           <div class="divider"></div>
           <div class="section-label">解析</div>

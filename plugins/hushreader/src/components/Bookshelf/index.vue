@@ -436,8 +436,32 @@ async function resolveEpubCovers() {
   }
 }
 
+async function resolveMobiCovers() {
+  if (configStore.config.other.plainTextCover) return
+  const mobiBooks = bookStore.books.filter(b => b.format === 'mobi' && !b.coverImage && !b.customCoverImage)
+  for (const book of mobiBooks) {
+    try {
+      const cached = await loadCover(book.id)
+      if (cached) {
+        book.coverImage = cached
+        continue
+      }
+      const content = window.services?.readFileBinary?.(book.filePath)
+      if (!content) continue
+      const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+      const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
+      const result = await parseMobi(file)
+      if (result.coverUrl) {
+        book.coverImage = result.coverUrl
+        saveCover(book.id, result.coverUrl).catch(() => {})
+      }
+    } catch {}
+  }
+}
+
 watch(() => bookStore.books.length, () => {
   resolveEpubCovers()
+  resolveMobiCovers()
 }, { immediate: true })
 
 watch(() => configStore.config.other.plainTextCover, async (plain) => {
@@ -449,6 +473,7 @@ watch(() => configStore.config.other.plainTextCover, async (plain) => {
     await Promise.allSettled(bookStore.books.flatMap(b => [removeCover(b.id), removeCustomCover(b.id)]))
   } else {
     resolveEpubCovers()
+    resolveMobiCovers()
   }
 })
 

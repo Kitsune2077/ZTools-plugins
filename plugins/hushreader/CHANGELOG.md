@@ -15,6 +15,7 @@ All notable changes to this project will be documented in this file.
 - **MOBI recordOffsets 边界检查**：增加 `firstRecordOffset + 16 > data.length` 检查，防止格式损坏文件导致越界
 - **MOBI firstImageIndex 为 0xffffffff 时封面索引错误**：在 extractCoverUrl 中判断 firstImageIndex 无效值，避免错误计算封面记录索引
 - **HTML 实体解码 fromCharCode → fromCodePoint**：`&#xxx;` 和 `&#xHH;` 解码改用 `String.fromCodePoint`，parseInt 增加 radix 参数，支持 BMP 外字符
+- **纯色封面关闭后 MOBI 封面未恢复**：新增 `resolveMobiCovers()` 函数，关闭纯色封面时同步恢复 MOBI 书籍封面（此前仅恢复 EPUB 封面）
 
 ### Removed
 - **固定行数分页模式**：移除分页模式中的"固定行数"选项，统一使用自适应模式
