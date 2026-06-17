@@ -235,7 +235,7 @@ function commitCapture(targetArr: string[]) {
           <div class="setting-row">
             <label>窗口高度</label>
             <div class="input-group">
-              <input type="range" min="22" max="160" v-model.number="cfg.hushreader.hushreaderHeight" class="slider" />
+              <input type="range" min="22" max="500" v-model.number="cfg.hushreader.hushreaderHeight" class="slider" />
               <span class="badge">{{ cfg.hushreader.hushreaderHeight }}px</span>
             </div>
           </div>
@@ -394,25 +394,17 @@ function commitCapture(targetArr: string[]) {
           <div class="section-label">阅读功能</div>
 
           <div class="setting-row">
-            <label>分页模式</label>
-            <select v-model="cfg.function.pageMode" class="select">
-              <option value="adaptive">自适应（按窗口高度）</option>
-              <option value="fixed">固定行数</option>
-            </select>
-          </div>
-
-          <div class="setting-row" v-if="cfg.function.pageMode === 'fixed'">
-            <label>每页行数</label>
-            <div class="input-group">
-              <input type="number" min="1" max="30" v-model.number="cfg.function.pageLines" class="number-input" />
-              <span class="unit">行</span>
-            </div>
-          </div>
-
-          <div class="setting-row">
             <label>窗口可拖动</label>
             <label class="toggle">
               <input type="checkbox" v-model="cfg.function.windowMovable" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+
+          <div class="setting-row">
+            <label>窗口大小锁定</label>
+            <label class="toggle">
+              <input type="checkbox" v-model="cfg.function.windowSizeLocked" />
               <span class="toggle-track"></span>
             </label>
           </div>
@@ -438,8 +430,8 @@ function commitCapture(targetArr: string[]) {
               <span class="toggle-track"></span>
             </label>
           </div>
-          <p v-if="!cfg.other.plainTextCover" class="hint" style="margin: -2px 0 6px; padding-left: 0">关闭时 EPUB 书籍将解析封面图片，可能消耗较多资源</p>
-          <p v-else class="hint" style="margin: -2px 0 6px; padding-left: 0">所有书籍使用纯色背景封面，不解析 EPUB 封面图片</p>
+          <p v-if="!cfg.other.plainTextCover" class="hint" style="margin: -2px 0 6px; padding-left: 0">关闭时书籍将解析封面图片，可能消耗较多资源</p>
+          <p v-else class="hint" style="margin: -2px 0 6px; padding-left: 0">所有书籍使用纯色背景封面，不解析封面图片</p>
 
           <div class="divider"></div>
           <div class="section-label">解析</div>
@@ -500,7 +492,7 @@ function commitCapture(targetArr: string[]) {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(28, 25, 23, 0.3);
+  background: var(--c-overlay-bg);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
@@ -824,7 +816,7 @@ function commitCapture(targetArr: string[]) {
 .confirm-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(28, 25, 23, 0.3);
+  background: var(--c-overlay-bg);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;

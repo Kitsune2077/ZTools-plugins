@@ -5,11 +5,14 @@ import { useConfigStore } from '../../stores/config'
 import { useReaderStore } from '../../stores/reader'
 import { parseTxt } from '../../utils/txtParser'
 import { parseEpub } from '../../utils/epubParser'
+import { parseMobi } from '../../utils/mobiParser'
+import { saveCover, loadCover, removeCover, saveCustomCover, loadCustomCover, removeCustomCover, removeBookData } from '../../utils/db'
 import SettingsModal from '../Settings/index.vue'
 import ContextMenu from './ContextMenu.vue'
 import BookCard from './BookCard.vue'
 import Toast from './Toast.vue'
 import Modal from './Modal.vue'
+import ThemeToggle from './ThemeToggle.vue'
 
 const props = defineProps<{ enterAction?: any }>()
 
@@ -87,6 +90,15 @@ async function openChapterList(bookId: string) {
       const text = window.services?.readFile(book.filePath) ?? ''
       const chapters = parseTxt(text, configStore.config.other.chapterRegex || undefined)
       chapterListItems.value = chapters.map(c => ({ index: c.index, title: c.title }))
+    } else if (book.format === 'mobi') {
+      const content = window.services?.readFileBinary?.(book.filePath)
+      if (content) {
+        const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+        const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
+        const result = await parseMobi(file)
+        if (result.error) { toast(`加载章节失败：${result.error}`, 'error'); showChapterList.value = false; return }
+        chapterListItems.value = result.chapters.map(c => ({ index: c.index, title: c.title }))
+      }
     } else {
       const content = window.services?.readFileBinary?.(book.filePath)
       if (content) {
@@ -214,7 +226,9 @@ function openCoverPicker(bookId: string) {
     if (!file) return
     const reader = new FileReader()
     reader.onload = () => {
-      bookStore.updateBook(bookId, { customCoverImage: reader.result as string })
+      const data = reader.result as string
+      bookStore.updateBook(bookId, { customCoverImage: data })
+      saveCustomCover(bookId, data).catch(() => {})
       toast('封面已更新', 'success')
     }
     reader.readAsDataURL(file)
@@ -226,12 +240,14 @@ async function repairCover(bookId: string) {
   const book = bookStore.books.find(b => b.id === bookId)
   if (!book || book.format !== 'epub' || configStore.config.other.plainTextCover) {
     bookStore.updateBook(bookId, { coverImage: undefined })
+    removeCover(bookId).catch(() => {})
     return
   }
   try {
     const content = window.services?.readFileBinary?.(book.filePath)
     if (!content) {
       bookStore.updateBook(bookId, { coverImage: undefined })
+      removeCover(bookId).catch(() => {})
       return
     }
     const blob = new Blob([content], { type: 'application/epub+zip' })
@@ -239,11 +255,14 @@ async function repairCover(bookId: string) {
     const result = await parseEpub(file)
     if (result.coverUrl) {
       bookStore.updateBook(bookId, { coverImage: result.coverUrl })
+      saveCover(bookId, result.coverUrl).catch(() => {})
     } else {
       bookStore.updateBook(bookId, { coverImage: undefined })
+      removeCover(bookId).catch(() => {})
     }
   } catch {
     bookStore.updateBook(bookId, { coverImage: undefined })
+    removeCover(bookId).catch(() => {})
   }
 }
 
@@ -270,14 +289,15 @@ async function importBook(filePath: string) {
   const name = filePath.split(/[\\/]/).pop() ?? ''
   const isEpub = /\.epub$/i.test(name)
   const isTxt = /\.txt$/i.test(name)
-  if (!isEpub && !isTxt) {
-    toast('仅支持 EPUB 和 TXT 格式', 'error')
+  const isMobi = /\.mobi$/i.test(name)
+  if (!isEpub && !isTxt && !isMobi) {
+    toast('仅支持 EPUB、TXT 和 MOBI 格式', 'error')
     return
   }
 
   isLoading.value = true
   try {
-    let title = name.replace(/\.(epub|txt)$/i, '')
+    let title = name.replace(/\.(epub|txt|mobi)$/i, '')
     let author = ''
     let coverColor = randomCoverColor()
     let coverImage: string | undefined
@@ -296,11 +316,28 @@ async function importBook(filePath: string) {
       } catch {}
     }
 
+    if (isMobi) {
+      try {
+        const content = window.services?.readFileBinary?.(filePath)
+        if (content) {
+          const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+          const file = new File([blob], name)
+          const result = await parseMobi(file)
+          if (result.error) { toast(`MOBI解析失败：${result.error}`, 'error'); return }
+          title = result.title || title
+          author = result.author || ''
+          if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
+        }
+      } catch (e: any) {
+        toast(`MOBI导入失败：${e.message}`, 'error'); return
+      }
+    }
+
     const fileModifiedAt = window.services?.getFileModifiedTime?.(filePath)
 
     const book = bookStore.addBook({
       title, author,
-      format: isEpub ? 'epub' : 'txt',
+      format: isEpub ? 'epub' : isMobi ? 'mobi' : 'txt',
       filePath,
       coverColor,
       coverImage,
@@ -308,6 +345,7 @@ async function importBook(filePath: string) {
     })
 
     if (book) {
+      if (coverImage) saveCover(book.id, coverImage).catch(() => {})
       toast(`《${title}》已加入书架`, 'success')
     } else {
       toast('该书籍已在书架中', 'info')
@@ -323,7 +361,7 @@ function handleAddBook() {
   const picker = window.ztools?.showOpenDialog({
     title: '选择书籍',
     buttonLabel: '导入',
-    filters: [{ name: '书籍文件', extensions: ['epub', 'txt'] }],
+    filters: [{ name: '书籍文件', extensions: ['epub', 'txt', 'mobi'] }],
     properties: ['openFile']
   })
 
@@ -380,6 +418,11 @@ async function resolveEpubCovers() {
   const epubBooks = bookStore.books.filter(b => b.format === 'epub' && !b.coverImage && !b.customCoverImage)
   for (const book of epubBooks) {
     try {
+      const cached = await loadCover(book.id)
+      if (cached) {
+        book.coverImage = cached
+        continue
+      }
       const content = window.services?.readFileBinary?.(book.filePath)
       if (!content) continue
       const blob = new Blob([content], { type: 'application/epub+zip' })
@@ -387,6 +430,30 @@ async function resolveEpubCovers() {
       const result = await parseEpub(file)
       if (result.coverUrl) {
         book.coverImage = result.coverUrl
+        saveCover(book.id, result.coverUrl).catch(() => {})
+      }
+    } catch {}
+  }
+}
+
+async function resolveMobiCovers() {
+  if (configStore.config.other.plainTextCover) return
+  const mobiBooks = bookStore.books.filter(b => b.format === 'mobi' && !b.coverImage && !b.customCoverImage)
+  for (const book of mobiBooks) {
+    try {
+      const cached = await loadCover(book.id)
+      if (cached) {
+        book.coverImage = cached
+        continue
+      }
+      const content = window.services?.readFileBinary?.(book.filePath)
+      if (!content) continue
+      const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+      const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
+      const result = await parseMobi(file)
+      if (result.coverUrl) {
+        book.coverImage = result.coverUrl
+        saveCover(book.id, result.coverUrl).catch(() => {})
       }
     } catch {}
   }
@@ -394,16 +461,19 @@ async function resolveEpubCovers() {
 
 watch(() => bookStore.books.length, () => {
   resolveEpubCovers()
+  resolveMobiCovers()
 }, { immediate: true })
 
-watch(() => configStore.config.other.plainTextCover, (plain) => {
+watch(() => configStore.config.other.plainTextCover, async (plain) => {
   if (plain) {
-    bookStore.books.forEach(b => {
+    for (const b of bookStore.books) {
       b.coverImage = undefined
       b.customCoverImage = undefined
-    })
+    }
+    await Promise.allSettled(bookStore.books.flatMap(b => [removeCover(b.id), removeCustomCover(b.id)]))
   } else {
     resolveEpubCovers()
+    resolveMobiCovers()
   }
 })
 
@@ -485,7 +555,7 @@ const cfg = computed(() => configStore.config)
           <div v-else class="spinner"></div>
         </div>
         <span class="add-label">添加本地书籍</span>
-        <span class="add-sub">支持 EPUB / TXT</span>
+        <span class="add-sub">支持 EPUB / TXT / MOBI</span>
       </div>
 
       <!-- Book cards -->
@@ -611,6 +681,11 @@ const cfg = computed(() => configStore.config)
 
     <!-- Toast -->
     <Toast :message="toastMsg" :type="toastType" />
+
+    <!-- Theme Toggle -->
+    <div class="theme-toggle-fab">
+      <ThemeToggle />
+    </div>
   </div>
 </template>
 
@@ -967,4 +1042,11 @@ const cfg = computed(() => configStore.config)
   color: var(--c-ink-inverse);
 }
 .btn-danger:hover { opacity: 0.85; }
+
+.theme-toggle-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100;
+}
 </style>

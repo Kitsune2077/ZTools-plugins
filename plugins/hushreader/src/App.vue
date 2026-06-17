@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue'
 import Bookshelf from './components/Bookshelf/index.vue'
+import Toast from './components/Bookshelf/Toast.vue'
 import { useReaderStore } from './stores/reader'
 import { useBookStore } from './stores/books'
 import { useConfigStore } from './stores/config'
 import { parseTxt } from './utils/txtParser'
 import { parseEpub } from './utils/epubParser'
+import { parseMobi } from './utils/mobiParser'
+import { loadChapters, saveChapters } from './utils/db'
 
 type HushreaderCommand = string | { type?: string; width?: number; height?: number; x?: number; y?: number; percent?: number }
 type HushreaderBounds = { x: number; y: number; width: number; height: number }
@@ -33,7 +36,7 @@ type AppBrowserWindow = {
 const FISH_MIN_WIDTH = 280
 const FISH_MAX_WIDTH = 1180
 const FISH_MIN_HEIGHT = 22
-const FISH_MAX_HEIGHT = 160
+const FISH_MAX_HEIGHT = 500
 const FISH_META_ROW_HEIGHT = 18
 const FISH_SIDE_CONTROLS_WIDTH = 44
 const FISH_CONTENT_PADDING = 20
@@ -49,6 +52,9 @@ const isReaderHidden = ref(false)
 const isAutoPaging = ref(false)
 const isHushreaderKeyboardActive = ref(false)
 const hushreaderActivated = ref(false)
+const toastMsg = ref('')
+const toastType = ref<'info' | 'error' | 'success'>('info')
+let toastTimer = 0
 let autoTimer = 0
 let isAutoPageTickRunning = false
 
@@ -207,7 +213,9 @@ function getHushreaderPayload(bounds = getHushreaderWindowBounds()) {
       bgColor: hushreaderCfg.value.bgColor,
       textColor: hushreaderCfg.value.textColor,
       autoFlipEnabled: hushreaderCfg.value.autoFlipEnabled,
-      fontFamily: hushreaderCfg.value.fontFamily
+      fontFamily: hushreaderCfg.value.fontFamily,
+      windowMovable: cfg.value.function.windowMovable,
+      windowSizeLocked: cfg.value.function.windowSizeLocked
     }
   }
 }
@@ -332,6 +340,13 @@ function toggleAutoPaging() {
   hushreaderCfg.value.autoFlipEnabled = isAutoPaging.value
 }
 
+function toast(msg: string, type: 'info' | 'error' | 'success' = 'info') {
+  toastMsg.value = msg
+  toastType.value = type
+  clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => { toastMsg.value = '' }, 3000)
+}
+
 function closePlugin() {
   isReaderHidden.value = true
   hushreaderActivated.value = false
@@ -358,19 +373,32 @@ function getFileModifiedTime(filePath: string): number | null {
   }
 }
 
-async function parseBookAndGetChapters(book: typeof bookStore.currentBook): Promise<any[]> {
-  if (!book) throw new Error('书籍不存在')
+async function parseBookAndGetChapters(book: typeof bookStore.currentBook): Promise<any[] | null> {
+  if (!book) { toast('书籍不存在', 'error'); return null }
 
   if (book.format === 'txt') {
     const text = (window as any).services?.readFile(book.filePath) ?? ''
     return parseTxt(text, configStore.config.other.chapterRegex || undefined)
+  } else if (book.format === 'mobi') {
+    const content = (window as any).services?.readFileBinary?.(book.filePath)
+    if (!content) { toast('无法读取MOBI文件', 'error'); return null }
+    const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+    const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
+    const result = await parseMobi(file)
+    if (result.error) { toast(`MOBI解析失败：${result.error}`, 'error'); return null }
+    return result.chapters
   } else {
     const content = (window as any).services?.readFileBinary?.(book.filePath)
-    if (!content) throw new Error('无法读取文件')
+    if (!content) { toast('无法读取EPUB文件', 'error'); return null }
     const blob = new Blob([content], { type: 'application/epub+zip' })
     const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.epub')
-    const { chapters } = await parseEpub(file)
-    return chapters
+    try {
+      const { chapters } = await parseEpub(file)
+      return chapters
+    } catch (e: any) {
+      toast(`EPUB解析失败：${e.message}`, 'error')
+      return null
+    }
   }
 }
 
@@ -385,10 +413,18 @@ async function openBookAndHushreader(bookId: string) {
   readerStore.isLoading = true
 
   try {
-    const chapters = await parseBookAndGetChapters(book)
+    let chapters = await loadChapters(bookId)
+    const currentModified = getFileModifiedTime(book.filePath)
+    const fileChanged = currentModified !== book.fileModifiedAt
+
+    if (!chapters || fileChanged) {
+      chapters = await parseBookAndGetChapters(book)
+      if (!chapters) return
+      saveChapters(bookId, chapters).catch(() => {})
+    }
+
     readerStore.setChapters(chapters)
 
-    const currentModified = getFileModifiedTime(book.filePath)
     if (currentModified !== book.fileModifiedAt) {
       bookStore.updateBook(bookId, { fileModifiedAt: currentModified })
     }
@@ -404,7 +440,7 @@ async function openBookAndHushreader(bookId: string) {
       pushHushreaderState()
     })
   } catch (e: any) {
-    alert(`打开失败：${e.message}`)
+    toast(`打开失败：${e.message}`, 'error')
   } finally {
     readerStore.isLoading = false
   }
@@ -573,7 +609,9 @@ watch(
     hushreaderCfg.value.bgColor,
     hushreaderCfg.value.textColor,
     hushreaderCfg.value.autoFlipEnabled,
-    hushreaderCfg.value.fontFamily
+    hushreaderCfg.value.fontFamily,
+    cfg.value.function.windowMovable,
+    cfg.value.function.windowSizeLocked
   ],
   () => {
     nextTick(() => {
@@ -616,4 +654,5 @@ onBeforeUnmount(() => {
   <Bookshelf
     :enter-action="enterAction"
   />
+  <Toast :message="toastMsg" :type="toastType" />
 </template>
