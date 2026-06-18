@@ -356,13 +356,43 @@ function closePlugin() {
 function saveReadingProgress() {
   const book = bookStore.currentBook
   if (!book) return
-  bookStore.updateBook(book.id, {
+  const now = Date.now()
+  const updates: Partial<typeof book> = {
     lastChapter: readerStore.currentChapterIndex,
     progressIndex: readerStore.progressIndex,
-    lastReadAt: Date.now(),
+    lastReadAt: now,
     totalChapters: readerStore.chapters.length,
     readingPercent: readerStore.readingPercent
-  })
+  }
+  if (!book.firstReadAt) {
+    updates.firstReadAt = now
+  }
+  if (book.lastReadAt && book.lastReadAt > 0) {
+    const elapsed = now - book.lastReadAt
+    if (elapsed > 0 && elapsed < 30 * 60 * 1000) {
+      const totalMs = (book.readingTimeMs || 0) + elapsed
+      updates.readingTimeMs = totalMs
+      const totalChars = readerStore.chapters.reduce((sum, ch) => sum + ch.content.length, 0)
+      const currentReadChars = Math.round(totalChars * (readerStore.readingPercent / 100))
+      const prevReadChars = book.lastSaveReadChars || 0
+      const deltaChars = Math.max(0, currentReadChars - prevReadChars)
+      updates.lastSaveReadChars = currentReadChars
+      const elapsedMinutes = elapsed / 60000
+      if (elapsedMinutes > 0 && deltaChars > 0) {
+        const sessionSpeed = deltaChars / elapsedMinutes
+        const prevSpeed = book.readingSpeed || 0
+        if (prevSpeed > 0) {
+          updates.readingSpeed = Math.round(prevSpeed * 0.6 + sessionSpeed * 0.4)
+        } else {
+          updates.readingSpeed = Math.round(sessionSpeed)
+        }
+      }
+    }
+  } else {
+    const totalChars = readerStore.chapters.reduce((sum, ch) => sum + ch.content.length, 0)
+    updates.lastSaveReadChars = Math.round(totalChars * (readerStore.readingPercent / 100))
+  }
+  bookStore.updateBook(book.id, updates)
 }
 
 function getFileModifiedTime(filePath: string): number | null {
@@ -624,9 +654,9 @@ watch(
   }
 )
 
-onMounted(() => {
-  configStore.load()
-  bookStore.load()
+onMounted(async () => {
+  await configStore.load()
+  await bookStore.load()
   ;(window as any).ztools?.onPluginEnter?.((action: any) => {
     route.value = action.code
     enterAction.value = action

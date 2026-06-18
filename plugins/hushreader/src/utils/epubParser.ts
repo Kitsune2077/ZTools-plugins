@@ -8,6 +8,7 @@ import { preprocessText } from './txtParser'
 export async function parseEpub(file: File): Promise<{
   title: string
   author: string
+  description: string
   chapters: Chapter[]
   coverUrl?: string
 }> {
@@ -20,6 +21,7 @@ export async function parseEpub(file: File): Promise<{
   const metadata = await book.loaded.metadata
   const title = (metadata as any).title || file.name.replace(/\.epub$/i, '')
   const author = (metadata as any).creator || ''
+  const description = (metadata as any).description || ''
 
   // 尝试获取封面
   let coverUrl: string | undefined
@@ -113,7 +115,7 @@ export async function parseEpub(file: File): Promise<{
 
   try { book.destroy() } catch { }
 
-  return { title, author, chapters, coverUrl }
+  return { title, author, description, chapters, coverUrl }
 }
 
 interface ExtractResult {

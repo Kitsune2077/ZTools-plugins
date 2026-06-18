@@ -437,13 +437,13 @@ function commitCapture(targetArr: string[]) {
           <div class="section-label">解析</div>
 
           <div class="setting-row" style="align-items: flex-start; flex-direction: column; gap: 6px;">
-            <label>TXT 章节识别正则</label>
+            <label>TXT 章节识别正则 <span class="tip-icon" tabindex="0">ⓘ<span class="tip-bubble">默认规则：匹配以"第"开头，后跟中文数字（零一二三…）或阿拉伯数字，再跟"章/节/卷/集/部"的行，如"第三章 大战"、第12卷 等</span></span></label>
             <input
               v-model="cfg.other.chapterRegex"
               class="text-input full-width"
               placeholder="留空使用默认规则（第X章...）"
             />
-            <p class="hint" style="margin:0">支持标准 JavaScript 正则语法，EPUB 使用内置章节标识</p>
+            <p class="hint" style="margin:0">支持标准 JavaScript 正则语法，EPUB/MOBI 使用内置章节标识</p>
           </div>
 
           <div class="divider"></div>
@@ -719,6 +719,55 @@ function commitCapture(targetArr: string[]) {
 .full-width { width: 100%; }
 
 .hint { font-size: 11px; color: var(--c-ink-tertiary); margin: 0 0 6px; }
+
+.tip-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 12px;
+  color: var(--c-ink-tertiary);
+  cursor: help;
+  vertical-align: middle;
+  margin-left: 4px;
+  border-radius: 50%;
+  transition: color 0.15s var(--ease-out);
+}
+.tip-icon:hover,
+.tip-icon:focus { color: var(--c-accent); }
+.tip-bubble {
+  display: none;
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  width: 260px;
+  padding: 10px 12px;
+  background: var(--c-surface-overlay);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xl);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--c-ink);
+  white-space: normal;
+  z-index: 100;
+  pointer-events: none;
+}
+.tip-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--c-surface-overlay);
+}
+.tip-icon:hover .tip-bubble,
+.tip-icon:focus .tip-bubble { display: block; }
 
 .toggle {
   position: relative;

@@ -6,6 +6,7 @@ export interface Book {
   id: string
   title: string
   author: string
+  description?: string
   format: 'epub' | 'txt' | 'mobi'
   filePath: string
   coverColor?: string
@@ -13,12 +14,17 @@ export interface Book {
   customCoverImage?: string
   categories?: string[]
   addedAt: number
+  updatedAt?: number
+  firstReadAt?: number
   lastReadAt?: number
   lastChapter?: number
   lastPage?: number
   progressIndex?: number
   totalChapters?: number
   readingPercent?: number
+  readingTimeMs?: number
+  readingSpeed?: number
+  lastSaveReadChars?: number
   fileModifiedAt?: number | null
 }
 
@@ -103,12 +109,14 @@ export const useBookStore = defineStore('books', () => {
     }
   }
 
-  function addBook(book: Omit<Book, 'id' | 'addedAt'>) {
+  function addBook(book: Omit<Book, 'id' | 'addedAt' | 'updatedAt'>) {
     if (books.value.some(b => b.filePath === book.filePath)) return undefined
+    const now = Date.now()
     const newBook: Book = {
       ...book,
-      id: `book_${Date.now()}_${Math.random().toString(36).slice(2)}`,
-      addedAt: Date.now()
+      id: `book_${now}_${Math.random().toString(36).slice(2)}`,
+      addedAt: now,
+      updatedAt: now
     }
     books.value.unshift(newBook)
     save()

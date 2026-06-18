@@ -1,6 +1,8 @@
 <div align="center">
 
-# 隐阅盒 · HushReader
+![HushReader Logo](public/logo.png)
+
+# [隐阅盒 · HushReader](https://github.com/me1dlinger/hushreader)
 
 适配 [ZTools](https://github.com/ZToolsCenter/ZTools) 的阅读插件，支持 TXT / EPUB / MOBI 格式
 
@@ -19,12 +21,14 @@
 
 ## 截图
 
-<div align="center">
-  <img src="https://files.seeusercontent.com/2026/06/16/tr3Y/image_83.png" width="80%" />
-  <img src="https://files.seeusercontent.com/2026/06/16/zLc1/image_82.png" width="80%" />
-  <img src="https://files.seeusercontent.com/2026/06/16/4Uti/image_80.png" width="80%" />
-  <img src="https://files.seeusercontent.com/2026/06/16/fjG0/image_81.png" width="80%" />
-</div>
+![书架](https://files.seeusercontent.com/2026/06/17/qvX8/image_86.png)
+![暗色模式](https://files.seeusercontent.com/2026/06/17/lu4H/image_85.png)
+![书籍信息](https://files.seeusercontent.com/2026/06/18/D9di/image_90.png)
+![隐阅窗口设置](https://files.seeusercontent.com/2026/06/17/eCu4/image_89.png)
+![功能设置](https://files.seeusercontent.com/2026/06/17/0bqW/image_88.png)
+![其他设置](https://files.seeusercontent.com/2026/06/17/y3uD/image_87.png)
+![隐阅效果](https://files.seeusercontent.com/2026/06/18/h1Jb/show.gif)
+
 
 ## 快速开始
 

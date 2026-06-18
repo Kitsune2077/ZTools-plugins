@@ -375,6 +375,7 @@ function encryptionAdvisory(type: number): string {
 export async function parseMobi(file: File): Promise<{
   title: string
   author: string
+  description: string
   chapters: Chapter[]
   coverUrl?: string
   encrypted?: boolean
@@ -384,7 +385,7 @@ export async function parseMobi(file: File): Promise<{
   const data = new Uint8Array(buffer)
 
   if (data.length < PALMDB_HEADER_SIZE + RECORD_INFO_SIZE) {
-    return { title: '', author: '', chapters: [], error: '文件太小，不是有效的MOBI文件' }
+    return { title: '', author: '', description: '', chapters: [], error: '文件太小，不是有效的MOBI文件' }
   }
 
   // The PDB header's own record count (not the PalmDOC "text record count")
@@ -393,12 +394,12 @@ export async function parseMobi(file: File): Promise<{
   const recordOffsets = getPalmDBRecordOffsets(data, totalPdbRecordCount)
 
   if (recordOffsets.length === 0) {
-    return { title: '', author: '', chapters: [], error: '无法读取MOBI文件的记录索引' }
+    return { title: '', author: '', description: '', chapters: [], error: '无法读取MOBI文件的记录索引' }
   }
 
   const firstRecordOffset = recordOffsets[0]
   if (firstRecordOffset + 16 > data.length) {
-    return { title: '', author: '', chapters: [], error: 'MOBI文件格式损坏或记录偏移越界' }
+    return { title: '', author: '', description: '', chapters: [], error: 'MOBI文件格式损坏或记录偏移越界' }
   }
   const palmDocHeader = parsePalmDocHeader(data, firstRecordOffset)
   const mobiHeader = parseMobiHeader(data, firstRecordOffset)
@@ -407,6 +408,7 @@ export async function parseMobi(file: File): Promise<{
   // ---- when the book's text content is DRM-protected, so it always works. ----
   let title = file.name.replace(/\.mobi$/i, '')
   let author = ''
+  let description = ''
   let exthRecords: EXTHRecord[] = []
 
   if (mobiHeader) {
@@ -428,6 +430,11 @@ export async function parseMobi(file: File): Promise<{
       if (authorRecord && authorRecord.text.trim()) {
         author = authorRecord.text.trim()
       }
+
+      const descRecord = findExthRecord(exthRecords, 101) // EXTH 101 = description
+      if (descRecord && descRecord.text.trim()) {
+        description = descRecord.text.trim()
+      }
     }
   }
 
@@ -441,6 +448,7 @@ export async function parseMobi(file: File): Promise<{
     return {
       title,
       author,
+      description,
       chapters: [],
       coverUrl,
       encrypted: true,
@@ -452,6 +460,7 @@ export async function parseMobi(file: File): Promise<{
     return {
       title,
       author,
+      description,
       chapters: [],
       coverUrl,
       error: '该书使用 HUFF/CDIC 高压缩格式，当前暂不支持解析正文（这与加密无关，是另一种压缩方案）。'
@@ -517,5 +526,5 @@ export async function parseMobi(file: File): Promise<{
     }
   }
 
-  return { title, author, chapters, coverUrl }
+  return { title, author, description, chapters, coverUrl }
 }

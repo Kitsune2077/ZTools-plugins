@@ -5,12 +5,15 @@ import type { Book } from '../../stores/books'
 const props = defineProps<{
   book: Book
   listMode?: boolean
+  selectionMode?: boolean
+  selected?: boolean
 }>()
 
 const emit = defineEmits<{
   click: []
   contextmenu: [e: MouseEvent]
   'cover-error': []
+  'toggle-select': []
 }>()
 
 const imgError = ref(false)
@@ -46,10 +49,14 @@ function progressText(book: Book): string {
 <template>
   <div
     class="book-card"
-    :class="{ 'list-mode': listMode }"
-    @click="$emit('click')"
-    @contextmenu.prevent="$emit('contextmenu', $event)"
+    :class="{ 'list-mode': listMode, 'selection-mode': selectionMode, selected }"
+    @click="selectionMode ? emit('toggle-select') : emit('click')"
+    @contextmenu.prevent="!selectionMode && emit('contextmenu', $event)"
   >
+    <!-- Selection checkbox -->
+    <div v-if="selectionMode" class="select-check" :class="{ checked: selected }">
+      <svg v-if="selected" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
     <!-- Cover -->
     <div
       class="book-cover"
@@ -103,6 +110,42 @@ function progressText(book: Book): string {
   gap: 14px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
+}
+
+.book-card.selection-mode {
+  cursor: pointer;
+  position: relative;
+}
+
+.book-card.selection-mode.selected {
+  background: var(--c-accent-soft);
+}
+
+.select-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--c-border-strong);
+  background: var(--c-surface-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  transition: all 0.15s var(--ease-out);
+}
+
+.select-check.checked {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: var(--c-ink-inverse);
+}
+
+.list-mode .select-check {
+  position: static;
+  flex-shrink: 0;
 }
 
 .book-cover {

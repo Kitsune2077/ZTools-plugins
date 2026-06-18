@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.2](https://github.com/me1dlinger/hushreader/releases/tag/v1.3.2) - 2026-06-18
+
+### Added
+- **拖拽导入书籍**：将书籍文件拖入书架界面时，显示拖拽悬停覆盖层提示"导入书籍"，松手后弹出确认弹窗列出待导入文件，确认后解析书籍并保存元数据，取消则放弃导入
+- **快捷文件导入**：支持通过 `hushreader-import` 命令从 ztools 快捷导入书籍文件，`onPluginEnter` 触发时自动解析并添加到书架
+- **TXT 章节正则提示气泡**：设置页"TXT 章节识别正则"标签旁新增 ⓘ 提示图标，悬停/聚焦时显示默认规则说明
+- **重载元数据**：右键菜单新增"重载元数据"选项，重新解析书籍的章节、封面、标题、作者等信息并更新，同时清除自定义封面
+- **恢复封面**：右键菜单新增"恢复封面"选项，EPUB/MOBI 删除自定义封面并重新从文件加载封面，TXT 删除自定义封面恢复为纯色封面
+- **多选模式**：书架头部新增多选按钮，点击进入多选模式，可逐个勾选书籍或通过分类栏"全选"按钮批量选中当前分类下所有书籍
+- **批量操作**：多选模式下底部显示操作栏，支持批量重载元数据和批量删除，批量删除前弹出确认弹窗
+
+- **书籍信息窗口**：右键菜单新增"书籍信息"选项，打开信息窗口展示封面与标题作者、简介、分类、阅读信息（导入/更新/首次阅读/最近阅读时间、阅读时长、阅读速度）；支持编辑模式可上传自定义封面、编辑标题/作者/简介、选择已有分类或新建分类
+- **EPUB/MOBI 简介解析**：导入和重载元数据时从 EPUB metadata.description 和 MOBI EXTH record 101 提取书籍简介
+- **阅读进度追踪**：保存阅读进度时记录首次阅读时间（firstReadAt）、累计阅读时长（readingTimeMs）、阅读速度（readingSpeed）
+- **updatedAt 时间戳**：书籍新增时设置 updatedAt = addedAt，编辑元数据或上传封面时更新 updatedAt，分类变更不更新 updatedAt
+
+
 ## [1.3.1](https://github.com/me1dlinger/hushreader/releases/tag/v1.3.1) - 2026-06-17
 
 ### Added
