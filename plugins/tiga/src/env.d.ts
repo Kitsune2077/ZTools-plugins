@@ -29,11 +29,11 @@ interface WorkTimeConfig {
 
 // Preload services 类型声明（对应 public/preload/services.js）
 interface Services {
-  timerId: number | null
+  timerId: ReturnType<typeof setInterval> | null
   startTimer: (intervalMinutes: number) => void
   stopTimer: () => void
   isInWorkTime: (workTimeConfig: WorkTimeConfig, workTimeMode: string) => boolean
-  sendNotification: (title: string, body: string) => void
+  sendNotification: (title: string, body: string, onClick?: () => void) => void
   addRecord: () => void
   getItem: <T = any>(key: string) => T | null
   setItem: (key: string, value: any) => void

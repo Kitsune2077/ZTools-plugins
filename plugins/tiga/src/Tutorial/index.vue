@@ -56,8 +56,10 @@ const renderMarkdown = (md: string) => {
   // 强调
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
 
-  // 段落
-  html = html.replace(/^(?!<[hulolb]|<hr|<li|<\/)(.*$)/gm, '<p>$1</p>')
+  // 段落（跳过空行/纯空白行，避免生成无意义的空 <p> 标签影响布局）
+  html = html.replace(/^(?!<[hulolb]|<hr|<li|<\/)(.*$)/gm, (m, p1) =>
+    p1.trim() ? `<p>${p1}</p>` : ''
+  )
 
   return html
 }

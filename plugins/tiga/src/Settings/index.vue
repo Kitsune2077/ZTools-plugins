@@ -203,13 +203,19 @@ const removeFunnyText = (index: number) => {
 
 // 初始化时段配置
 onMounted(() => {
+  const workTime = localConfig.value.workTime
   if (localConfig.value.workTimeMode === 'multi') {
-    multiTimeSlots.value = [...localConfig.value.workTime.multi]
+    // 防御性检查：兼容旧版本配置缺失 multi 字段
+    multiTimeSlots.value = workTime && Array.isArray(workTime.multi)
+      ? [...workTime.multi]
+      : []
   } else if (localConfig.value.workTimeMode === 'weekly') {
+    // 防御性检查：兼容从不包含 weekly 字段的旧版本升级
+    const weekly = workTime && workTime.weekly ? workTime.weekly : {}
     // 从 weekly 配置恢复 weeklySlots
     const slots: Array<{ start: string; end: string; days: number[] }> = []
     const dayMap: Record<number, { start: string; end: string }> = {}
-    for (const [day, config] of Object.entries(localConfig.value.workTime.weekly)) {
+    for (const [day, config] of Object.entries(weekly)) {
       if (config) {
         dayMap[Number(day)] = config
       }

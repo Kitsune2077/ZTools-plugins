@@ -220,11 +220,20 @@
   </div>
 
   <script>
+    // 将 Date 格式化为本地时区的 YYYY-MM-DD 字符串
+    // （避免 toISOString 在 UTC+8 凌晨 0-8 点把日期算成昨天）
+    function formatLocalDate(d) {
+      const y = d.getFullYear()
+      const m = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${y}-${m}-${day}`
+    }
+
     // 获取配置 - 使用 ZTools dbStorage API
     let config = null
 
     if (window.ztools && window.ztools.dbStorage) {
-      config = ztools.dbStorage.getItem('tiga_config')
+      config = window.ztools.dbStorage.getItem('tiga_config')
     }
 
     // 如果没有配置，使用默认值
@@ -389,11 +398,15 @@
 
       // 增加计数
       const now = new Date()
-      const today = now.toISOString().split('T')[0]
+      const today = formatLocalDate(now)
       const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
 
       if (window.ztools && window.ztools.dbStorage) {
-        const stats = ztools.dbStorage.getItem('tiga_stats') || { records: [] }
+        const stats = window.ztools.dbStorage.getItem('tiga_stats') || { records: [] }
+        // 防御性检查：兼容存储损坏或旧版本数据格式
+        if (!Array.isArray(stats.records)) {
+          stats.records = []
+        }
         const todayRecord = stats.records.find(r => r.date === today)
         if (todayRecord) {
           todayRecord.count++
@@ -402,7 +415,7 @@
         } else {
           stats.records.push({ date: today, count: 1, times: [time] })
         }
-        ztools.dbStorage.setItem('tiga_stats', stats)
+        window.ztools.dbStorage.setItem('tiga_stats', stats)
       } else {
         console.error('tiga: dbStorage 不可用，打卡记录未保存')
       }

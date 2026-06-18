@@ -2,6 +2,15 @@
 const fs = require('node:fs')
 const path = require('node:path')
 
+// 将 Date 格式化为本地时区的 YYYY-MM-DD 字符串
+// （避免 toISOString 在 UTC+8 凌晨 0-8 点把日期算成昨天，导致今日打卡记录存到错误日期）
+function formatLocalDate(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 // 存储文件路径
 const getStoragePath = (key) => {
   const userDataPath = window.ztools.getPath('userData')
@@ -117,9 +126,11 @@ window.services = {
   // 增加打卡记录（统一入口，供 Vue 层和弹窗调用）
   addRecord() {
     const now = new Date()
-    const today = now.toISOString().split('T')[0]
+    const today = formatLocalDate(now)
     const time = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
     const stats = this.getItem('tiga_stats') || { records: [] }
+    // 防御性检查：兼容存储损坏或旧版本数据格式
+    if (!Array.isArray(stats.records)) stats.records = []
 
     const todayRecord = stats.records.find(r => r.date === today)
     if (todayRecord) {
@@ -197,9 +208,8 @@ window.services = {
     if (!exerciseWindowInstance) return
 
     try {
-      if (typeof exerciseWindowInstance.destroy === 'function') {
-        exerciseWindowInstance.destroy()
-      } else if (typeof exerciseWindowInstance.close === 'function') {
+      // WindowInstance 提供 close()（API 类型声明中另有拼写错误的 destory()，统一用 close）
+      if (typeof exerciseWindowInstance.close === 'function') {
         exerciseWindowInstance.close()
       }
     } catch (e) {
@@ -266,12 +276,10 @@ window.services = {
       this.startTimer(config.interval)
     }
 
-    // 监听子窗口关闭消息（清空弹窗实例引用）
-    if (window.ztools && window.ztools.ipcOn) {
-      window.ztools.ipcOn('tiga-exercise-window-closed', () => {
-        exerciseWindowInstance = null
-      })
-    }
+    // 注意：子窗口（exercise-guide.html）通过 window.ztools.sendToParent 通知关闭，
+    // 但 ZTools 主窗口侧未提供对应的监听 API（ipcOn 不存在）。
+    // 因此不在此注册监听；运动弹窗实例引用会在下次 _showExercisePopup
+    // 调用 _closeAndClearExerciseWindow 时统一清理，不影响功能。
   }
 }
 

@@ -88,14 +88,6 @@ onUnmounted(() => {
       <Stats v-if="currentTab === 'stats'" :enter-action="enterAction" :config="config" @update:config="config = $event" />
       <Tutorial v-if="currentTab === 'tutorial'" :enter-action="enterAction" />
     </div>
-
-    <!-- 运动引导弹窗 -->
-    <ExerciseGuide
-      v-if="showExerciseGuide"
-      :exercise="config.exercise"
-      @complete="handleExerciseComplete"
-      @skip="handleExerciseSkip"
-    />
   </div>
 </template>
 

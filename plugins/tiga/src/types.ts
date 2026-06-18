@@ -128,24 +128,34 @@ export function getRandomText(style: Config['style'], normalTexts?: Notification
 }
 
 // 计算连续打卡天数（真正的连续：中间任何一天没打卡即中断）
+// 易用性优化：若今天尚未打卡（例如上午还未开始），
+// 但昨天有打卡，连续天数应依然有效，从昨天起向前计算。
+// 只有今天和昨天都没打卡时，连续才算中断。
 export function calculateStreak(records: StatsData['records']): number {
-  if (!records.length) return 0
+  if (!records || !records.length) return 0
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = getTodayDate()
 
   // 用 Map 做 O(1) 查找，替代之前的 Array.find O(n)
   const recordMap = new Map(records.map(r => [r.date, r]))
 
+  // 确定起始日期：若今天尚未打卡，则从昨天开始向前计算
+  const todayRecord = recordMap.get(today)
+  const startFromToday = todayRecord && todayRecord.count > 0
+
   let streak = 0
-  const checkDate = new Date(today)
+  const checkDate = parseLocalDate(today)
+  if (!startFromToday) {
+    // 今天未打卡：从昨天开始
+    checkDate.setDate(checkDate.getDate() - 1)
+  }
 
   for (let i = 0; i < 365; i++) {
-    const dateStr = checkDate.toISOString().split('T')[0]
+    const dateStr = formatLocalDate(checkDate)
     const record = recordMap.get(dateStr)
 
     if (!record || record.count <= 0) {
       // 没有记录或 count=0：连续中断
-      // 如果是第一天（今天）就没记录，streak 为 0
       break
     }
 
@@ -156,7 +166,21 @@ export function calculateStreak(records: StatsData['records']): number {
   return streak
 }
 
-// 获取今日日期字符串
+// 将 YYYY-MM-DD 解析为本地时区的 Date（避免 new Date('YYYY-MM-DD') 按 UTC 0 时解析）
+function parseLocalDate(dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+// 将 Date 格式化为本地时区的 YYYY-MM-DD 字符串
+function formatLocalDate(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// 获取今日日期字符串（本地时区，避免 toISOString 在 UTC+8 凌晨 0-8 点把日期算成昨天）
 export function getTodayDate(): string {
-  return new Date().toISOString().split('T')[0]
+  return formatLocalDate(new Date())
 }

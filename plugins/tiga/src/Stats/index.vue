@@ -13,38 +13,41 @@ const emit = defineEmits<{
 
 const stats = ref<StatsData>({ records: [] })
 
+// 防御性获取记录数组（兼容存储损坏或旧版本数据格式不完整）
+const records = computed(() => stats.value.records || [])
+
 // 今日完成次数
 const todayCount = computed(() => {
   const today = getTodayDate()
-  const record = stats.value.records.find(r => r.date === today)
+  const record = records.value.find(r => r.date === today)
   return record?.count || 0
 })
 
 // 今日完成时间
 const todayTimes = computed(() => {
   const today = getTodayDate()
-  const record = stats.value.records.find(r => r.date === today)
+  const record = records.value.find(r => r.date === today)
   return record?.times || []
 })
 
 // 连续打卡天数
 const streakDays = computed(() => {
-  return calculateStreak(stats.value.records)
+  return calculateStreak(records.value)
 })
 
 // 总打卡天数（有记录的天数）
 const totalDays = computed(() => {
-  return stats.value.records.filter(r => r.count > 0).length
+  return records.value.filter(r => r.count > 0).length
 })
 
 // 总完成次数
 const totalCount = computed(() => {
-  return stats.value.records.reduce((sum, r) => sum + r.count, 0)
+  return records.value.reduce((sum, r) => sum + r.count, 0)
 })
 
 // 历史记录（按日期降序）
 const sortedRecords = computed(() => {
-  return [...stats.value.records].sort((a, b) => b.date.localeCompare(a.date))
+  return [...records.value].sort((a, b) => b.date.localeCompare(a.date))
 })
 
 // 运行状态
@@ -67,7 +70,7 @@ const toggleEnabled = (val: boolean) => {
 // 加载统计数据
 const loadStats = () => {
   const savedStats = window.services.getItem(STORAGE_KEYS.stats)
-  if (savedStats) {
+  if (savedStats && Array.isArray(savedStats.records)) {
     stats.value = savedStats
   }
 }
