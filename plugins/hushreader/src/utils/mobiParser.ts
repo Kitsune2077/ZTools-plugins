@@ -237,8 +237,13 @@ function extractCoverUrl(
     const mime = detectImageMime(imageBytes)
     if (!mime) return undefined
 
-    const blob = new Blob([imageBytes], { type: mime })
-    return URL.createObjectURL(blob)
+    // 同步转换为 Base64，确保可以被 IndexedDB 永久缓存
+    let binary = ''
+    const len = imageBytes.byteLength
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(imageBytes[i])
+    }
+    return `data:${mime};base64,${btoa(binary)}`
   } catch {
     return undefined
   }

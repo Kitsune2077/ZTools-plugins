@@ -230,7 +230,7 @@ function openCoverPicker(bookId: string) {
     reader.onload = () => {
       const data = reader.result as string
       bookStore.updateBook(bookId, { customCoverImage: data, updatedAt: Date.now() })
-      saveCustomCover(bookId, data).catch(() => {})
+      saveCustomCover(bookId, data).catch(() => { })
       toast('封面已更新', 'success')
     }
     reader.readAsDataURL(file)
@@ -242,14 +242,14 @@ async function repairCover(bookId: string) {
   const book = bookStore.books.find(b => b.id === bookId)
   if (!book || book.format !== 'epub' || configStore.config.other.plainTextCover) {
     bookStore.updateBook(bookId, { coverImage: undefined })
-    removeCover(bookId).catch(() => {})
+    removeCover(bookId).catch(() => { })
     return
   }
   try {
     const content = window.services?.readFileBinary?.(book.filePath)
     if (!content) {
       bookStore.updateBook(bookId, { coverImage: undefined })
-      removeCover(bookId).catch(() => {})
+      removeCover(bookId).catch(() => { })
       return
     }
     const blob = new Blob([content], { type: 'application/epub+zip' })
@@ -257,14 +257,14 @@ async function repairCover(bookId: string) {
     const result = await parseEpub(file)
     if (result.coverUrl) {
       bookStore.updateBook(bookId, { coverImage: result.coverUrl })
-      saveCover(bookId, result.coverUrl).catch(() => {})
+      saveCover(bookId, result.coverUrl).catch(() => { })
     } else {
       bookStore.updateBook(bookId, { coverImage: undefined })
-      removeCover(bookId).catch(() => {})
+      removeCover(bookId).catch(() => { })
     }
   } catch {
     bookStore.updateBook(bookId, { coverImage: undefined })
-    removeCover(bookId).catch(() => {})
+    removeCover(bookId).catch(() => { })
   }
 }
 
@@ -273,18 +273,18 @@ async function restoreCover(bookId: string) {
   if (!book) return
 
   bookStore.updateBook(bookId, { customCoverImage: undefined })
-  removeCustomCover(bookId).catch(() => {})
+  removeCustomCover(bookId).catch(() => { })
 
   if (book.format === 'txt') {
     bookStore.updateBook(bookId, { coverImage: undefined })
-    removeCover(bookId).catch(() => {})
+    removeCover(bookId).catch(() => { })
     toast('封面已恢复为纯色', 'success')
     return
   }
 
   if (configStore.config.other.plainTextCover) {
     bookStore.updateBook(bookId, { coverImage: undefined })
-    removeCover(bookId).catch(() => {})
+    removeCover(bookId).catch(() => { })
     toast('封面已恢复', 'success')
     return
   }
@@ -293,7 +293,7 @@ async function restoreCover(bookId: string) {
     const content = window.services?.readFileBinary?.(book.filePath)
     if (!content) {
       bookStore.updateBook(bookId, { coverImage: undefined })
-      removeCover(bookId).catch(() => {})
+      removeCover(bookId).catch(() => { })
       toast('封面已恢复', 'success')
       return
     }
@@ -313,15 +313,15 @@ async function restoreCover(bookId: string) {
 
     if (coverImage) {
       bookStore.updateBook(bookId, { coverImage })
-      saveCover(bookId, coverImage).catch(() => {})
+      saveCover(bookId, coverImage).catch(() => { })
     } else {
       bookStore.updateBook(bookId, { coverImage: undefined })
-      removeCover(bookId).catch(() => {})
+      removeCover(bookId).catch(() => { })
     }
     toast('封面已恢复', 'success')
   } catch {
     bookStore.updateBook(bookId, { coverImage: undefined })
-    removeCover(bookId).catch(() => {})
+    removeCover(bookId).catch(() => { })
     toast('封面已恢复', 'success')
   }
 }
@@ -339,12 +339,13 @@ const deleteBookId = ref<string | null>(null)
 const showBookInfo = ref(false)
 const bookInfoId = ref<string | null>(null)
 
+const bookInfoBook = computed(() => bookStore.books.find(b => b.id === bookInfoId.value))
+
 function openBookInfo(bookId: string) {
   closeContextMenu()
   bookInfoId.value = bookId
   showBookInfo.value = true
 }
-
 function onBookInfoSaved(updates: Partial<typeof bookStore.books[0]>) {
   if (!bookInfoId.value) return
   bookStore.updateBook(bookInfoId.value, updates)
@@ -378,50 +379,54 @@ async function reloadMetadata(bookId: string, silent = false) {
 
     if (book.format === 'epub') {
       const content = window.services?.readFileBinary?.(book.filePath)
-      if (content) {
-        const blob = new Blob([content], { type: 'application/epub+zip' })
-        const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.epub')
-        const result = await parseEpub(file)
-        title = result.title || title
-        author = result.author || author
-        description = result.description || description
-        totalChapters = result.chapters?.length
-        if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
-        if (result.chapters?.length) saveChapters(bookId, result.chapters).catch(() => {})
+      if (!content) {
+        throw new Error('无法读取文件，请检查文件是否存在或路径是否正确')
       }
+      const blob = new Blob([content], { type: 'application/epub+zip' })
+      const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.epub')
+      const result = await parseEpub(file)
+      title = result.title || title
+      author = result.author || author
+      description = result.description || description
+      totalChapters = result.chapters?.length
+      if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
+      if (result.chapters?.length) saveChapters(bookId, result.chapters).catch(() => { })
     } else if (book.format === 'mobi') {
       const content = window.services?.readFileBinary?.(book.filePath)
-      if (content) {
-        const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
-        const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
-        const result = await parseMobi(file)
-        if (!result.error) {
-          title = result.title || title
-          author = result.author || author
-          description = result.description || description
-          totalChapters = result.chapters?.length
-          if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
-          if (result.chapters?.length) saveChapters(bookId, result.chapters).catch(() => {})
-        }
+      if (!content) {
+        throw new Error('无法读取文件，请检查文件是否存在或路径是否正确')
       }
+      const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+      const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
+      const result = await parseMobi(file)
+      if (result.error) { throw new Error(result.error) }
+      title = result.title || title
+      author = result.author || author
+      description = result.description || description
+      totalChapters = result.chapters?.length
+      if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
+      if (result.chapters?.length) saveChapters(bookId, result.chapters).catch(() => { })
     } else {
-      const text = window.services?.readFile(book.filePath) ?? ''
+      const text = window.services?.readFile(book.filePath)
+      if (text === undefined || text === null) {
+        throw new Error('无法读取文件，请检查文件是否存在或路径是否正确')
+      }
       const chapters = parseTxt(text, configStore.config.other.chapterRegex || undefined)
       totalChapters = chapters.length
-      if (chapters.length) saveChapters(bookId, chapters).catch(() => {})
+      if (chapters.length) saveChapters(bookId, chapters).catch(() => { })
     }
 
     const fileModifiedAt = window.services?.getFileModifiedTime?.(book.filePath)
     const updates: Partial<typeof book> = { title, author, description: description || undefined, totalChapters, fileModifiedAt, customCoverImage: undefined }
 
-    removeCustomCover(bookId).catch(() => {})
+    removeCustomCover(bookId).catch(() => { })
 
     if (coverImage) {
       updates.coverImage = coverImage
-      saveCover(bookId, coverImage).catch(() => {})
+      saveCover(bookId, coverImage).catch(() => { })
     } else {
       updates.coverImage = undefined
-      removeCover(bookId).catch(() => {})
+      removeCover(bookId).catch(() => { })
     }
 
     bookStore.updateBook(bookId, updates)
@@ -540,7 +545,7 @@ async function importBook(filePath: string) {
           description = result.description || ''
           if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
         }
-      } catch {}
+      } catch { }
     }
 
     if (isMobi) {
@@ -573,7 +578,7 @@ async function importBook(filePath: string) {
     })
 
     if (book) {
-      if (coverImage) saveCover(book.id, coverImage).catch(() => {})
+      if (coverImage) saveCover(book.id, coverImage).catch(() => { })
       toast(`《${title}》已加入书架`, 'success')
     } else {
       toast('该书籍已在书架中', 'info')
@@ -610,7 +615,7 @@ async function importDroppedFile(file: File) {
         author = result.author || ''
         description = result.description || ''
         if (result.coverUrl && !configStore.config.other.plainTextCover) coverImage = result.coverUrl
-      } catch {}
+      } catch { }
     }
 
     if (isMobi) {
@@ -635,7 +640,7 @@ async function importDroppedFile(file: File) {
     })
 
     if (book) {
-      if (coverImage) saveCover(book.id, coverImage).catch(() => {})
+      if (coverImage) saveCover(book.id, coverImage).catch(() => { })
       toast(`《${title}》已加入书架`, 'success')
     } else {
       toast('该书籍已在书架中', 'info')
@@ -783,9 +788,9 @@ async function resolveEpubCovers() {
       const result = await parseEpub(file)
       if (result.coverUrl) {
         book.coverImage = result.coverUrl
-        saveCover(book.id, result.coverUrl).catch(() => {})
+        saveCover(book.id, result.coverUrl).catch(() => { })
       }
-    } catch {}
+    } catch { }
   }
 }
 
@@ -806,9 +811,9 @@ async function resolveMobiCovers() {
       const result = await parseMobi(file)
       if (result.coverUrl) {
         book.coverImage = result.coverUrl
-        saveCover(book.id, result.coverUrl).catch(() => {})
+        saveCover(book.id, result.coverUrl).catch(() => { })
       }
-    } catch {}
+    } catch { }
   }
 }
 
@@ -841,7 +846,9 @@ const cfg = computed(() => configStore.config)
     <!-- Drop overlay -->
     <div v-if="fileHovering" class="drop-overlay">
       <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="17 8 12 3 7 8" />
+        <line x1="12" y1="3" x2="12" y2="15" />
       </svg>
       <span>导入书籍</span>
     </div>
@@ -850,36 +857,37 @@ const cfg = computed(() => configStore.config)
       <h1 class="shelf-title">书架</h1>
       <div class="shelf-search">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.35-4.35" />
         </svg>
-        <input
-          v-model="bookStore.searchQuery"
-          class="search-input"
-          placeholder="搜索书名或作者..."
-        />
+        <input v-model="bookStore.searchQuery" class="search-input" placeholder="搜索书名或作者..." />
       </div>
       <div class="shelf-actions">
-        <button
-          class="icon-btn"
-          :class="{ active: selectionMode }"
-          :title="selectionMode ? '退出多选' : '多选'"
-          @click="toggleSelectionMode"
-        >
+        <button class="icon-btn" :class="{ active: selectionMode }" :title="selectionMode ? '退出多选' : '多选'"
+          @click="toggleSelectionMode">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline v-if="selectionMode" points="18 6 6 18"/><polyline v-if="selectionMode" points="6 6 18 18"/>
-            <template v-else><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></template>
+            <polyline v-if="selectionMode" points="18 6 6 18" />
+            <polyline v-if="selectionMode" points="6 6 18 18" />
+            <template v-else>
+              <rect x="3" y="3" width="7" height="7" rx="1" />
+              <rect x="14" y="3" width="7" height="7" rx="1" />
+              <rect x="3" y="14" width="7" height="7" rx="1" />
+              <rect x="14" y="14" width="7" height="7" rx="1" />
+            </template>
           </svg>
         </button>
         <button class="icon-btn" title="关闭隐阅窗口" @click="handleHideHushreaderWindow">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-            <line x1="1" y1="1" x2="23" y2="23"/>
+            <path
+              d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+            <line x1="1" y1="1" x2="23" y2="23" />
           </svg>
         </button>
         <button class="icon-btn" title="设置" @click="showSettings = true">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
           </svg>
         </button>
       </div>
@@ -887,40 +895,20 @@ const cfg = computed(() => configStore.config)
 
     <!-- Category tabs -->
     <div class="category-bar">
-      <button
-        v-if="selectionMode"
-        class="category-tab select-all-btn"
+      <button v-if="selectionMode" class="category-tab select-all-btn"
         :class="{ active: bookStore.filteredBooks.length > 0 && bookStore.filteredBooks.every(b => selectedIds.has(b.id)) }"
-        @click="selectAllInCategory"
-      >全选</button>
-      <button
-        v-for="cat in bookStore.categories"
-        :key="cat"
-        class="category-tab"
-        :class="{ active: bookStore.activeCategory === cat }"
-        @click="bookStore.activeCategory = cat"
-      >{{ cat }}</button>
+        @click="selectAllInCategory">全选</button>
+      <button v-for="cat in bookStore.categories" :key="cat" class="category-tab"
+        :class="{ active: bookStore.activeCategory === cat }" @click="bookStore.activeCategory = cat">{{ cat }}</button>
       <div class="sort-group">
-        <button
-          class="sort-btn"
-          :class="{ active: bookStore.sortBy === 'lastReadAt' }"
-          @click="bookStore.sortBy = 'lastReadAt'"
-        >最近阅读</button>
-        <button
-          class="sort-btn"
-          :class="{ active: bookStore.sortBy === 'addedAt' }"
-          @click="bookStore.sortBy = 'addedAt'"
-        >最近添加</button>
-        <button
-          class="sort-btn"
-          :class="{ active: bookStore.sortBy === 'name' }"
-          @click="bookStore.sortBy = 'name'"
-        >名称</button>
-        <button
-          class="sort-btn"
-          :class="{ active: bookStore.sortBy === 'author' }"
-          @click="bookStore.sortBy = 'author'"
-        >作者</button>
+        <button class="sort-btn" :class="{ active: bookStore.sortBy === 'lastReadAt' }"
+          @click="bookStore.sortBy = 'lastReadAt'">最近阅读</button>
+        <button class="sort-btn" :class="{ active: bookStore.sortBy === 'addedAt' }"
+          @click="bookStore.sortBy = 'addedAt'">最近添加</button>
+        <button class="sort-btn" :class="{ active: bookStore.sortBy === 'name' }"
+          @click="bookStore.sortBy = 'name'">名称</button>
+        <button class="sort-btn" :class="{ active: bookStore.sortBy === 'author' }"
+          @click="bookStore.sortBy = 'author'">作者</button>
       </div>
     </div>
 
@@ -929,8 +917,9 @@ const cfg = computed(() => configStore.config)
       <!-- Add book card -->
       <div class="add-book-card" @click="handleAddBook" :class="{ loading: isLoading }">
         <div class="add-icon">
-          <svg v-if="!isLoading" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M12 5v14M5 12h14"/>
+          <svg v-if="!isLoading" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.5">
+            <path d="M12 5v14M5 12h14" />
           </svg>
           <div v-else class="spinner"></div>
         </div>
@@ -939,43 +928,28 @@ const cfg = computed(() => configStore.config)
       </div>
 
       <!-- Book cards -->
-      <BookCard
-        v-for="book in bookStore.filteredBooks"
-        :key="book.id"
-        :book="book"
-        :list-mode="cfg.other.listMode"
-        :selection-mode="selectionMode"
-        :selected="selectedIds.has(book.id)"
-        @click="!selectionMode && openBookAndHushreader?.(book.id)"
-        @toggle-select="toggleBookSelect(book.id)"
-        @contextmenu.prevent="onContextMenu(book.id, $event)"
-        @cover-error="repairCover(book.id)"
-      />
+      <BookCard v-for="book in bookStore.filteredBooks" :key="book.id" :book="book" :list-mode="cfg.other.listMode"
+        :selection-mode="selectionMode" :selected="selectedIds.has(book.id)"
+        @click="!selectionMode && openBookAndHushreader?.(book.id)" @toggle-select="toggleBookSelect(book.id)"
+        @contextmenu.prevent="onContextMenu(book.id, $event)" @cover-error="repairCover(book.id)" />
     </main>
 
     <!-- Empty state -->
     <div v-if="bookStore.filteredBooks.length === 0 && !isLoading" class="empty-state">
       <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
       </svg>
       <p>{{ bookStore.searchQuery ? '未找到匹配的书籍' : '书架空空如也，添加一本书开始阅读吧' }}</p>
     </div>
 
     <!-- Context Menu -->
-    <ContextMenu
-      v-if="contextMenuBook"
-      :pos="contextMenuPos"
-      @book-info="openBookInfo(contextMenuBook!)"
-      @chapter-list="openChapterList(contextMenuBook!)"
-      @change-path="openPathModal(contextMenuBook!)"
-      @edit-metadata="openMetadataModal(contextMenuBook!)"
-      @reload-metadata="openReloadMetadata(contextMenuBook!)"
-      @set-category="openCategoryModal(contextMenuBook!)"
-      @set-cover="openCoverPicker(contextMenuBook!)"
-      @restore-cover="openRestoreCover(contextMenuBook!)"
-      @delete="openDeleteModal(contextMenuBook!)"
-      @close="closeContextMenu"
-    />
+    <ContextMenu v-if="contextMenuBook" :pos="contextMenuPos" @book-info="openBookInfo(contextMenuBook!)"
+      @chapter-list="openChapterList(contextMenuBook!)" @change-path="openPathModal(contextMenuBook!)"
+      @edit-metadata="openMetadataModal(contextMenuBook!)" @reload-metadata="openReloadMetadata(contextMenuBook!)"
+      @set-category="openCategoryModal(contextMenuBook!)" @set-cover="openCoverPicker(contextMenuBook!)"
+      @restore-cover="openRestoreCover(contextMenuBook!)" @delete="openDeleteModal(contextMenuBook!)"
+      @close="closeContextMenu" />
 
     <!-- Settings Modal -->
     <SettingsModal v-if="showSettings" @close="showSettings = false" />
@@ -988,13 +962,8 @@ const cfg = computed(() => configStore.config)
           <span>正在解析章节...</span>
         </div>
         <div v-else class="chapter-items">
-          <button
-            v-for="ch in chapterListItems"
-            :key="ch.index"
-            class="chapter-item"
-            :class="{ current: ch.index === chapterListCurrentIndex }"
-            @click="jumpToChapter(ch.index)"
-          >
+          <button v-for="ch in chapterListItems" :key="ch.index" class="chapter-item"
+            :class="{ current: ch.index === chapterListCurrentIndex }" @click="jumpToChapter(ch.index)">
             <span class="ch-index">{{ ch.index + 1 }}</span>
             <span class="ch-title">{{ ch.title }}</span>
           </button>
@@ -1019,13 +988,8 @@ const cfg = computed(() => configStore.config)
       <div class="form-modal">
         <label class="form-label">已有分类（多选）</label>
         <div v-if="bookStore.categories.length > 1" class="category-tags">
-          <button
-            v-for="cat in bookStore.categories.filter(c => c !== '全部')"
-            :key="cat"
-            class="category-tag"
-            :class="{ active: categoryModalSelected.includes(cat) }"
-            @click="toggleCategorySelection(cat)"
-          >
+          <button v-for="cat in bookStore.categories.filter(c => c !== '全部')" :key="cat" class="category-tag"
+            :class="{ active: categoryModalSelected.includes(cat) }" @click="toggleCategorySelection(cat)">
             {{ cat }}
           </button>
         </div>
@@ -1072,7 +1036,8 @@ const cfg = computed(() => configStore.config)
         <div class="drop-file-list">
           <div v-for="(f, i) in pendingDropFiles" :key="i" class="drop-file-item">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
             </svg>
             <span>{{ f.name }}</span>
           </div>
@@ -1089,7 +1054,8 @@ const cfg = computed(() => configStore.config)
       <span class="batch-info">已选 {{ selectedCount }} 本</span>
       <div class="batch-actions">
         <button class="btn-secondary" :disabled="selectedCount === 0 || batchReloading" @click="batchReload">
-          <span v-if="batchReloading" class="spinner" style="width:14px;height:14px;border-width:1.5px;margin-right:4px"></span>
+          <span v-if="batchReloading" class="spinner"
+            style="width:14px;height:14px;border-width:1.5px;margin-right:4px"></span>
           批量重载
         </button>
         <button class="btn-danger" :disabled="selectedCount === 0" @click="openBatchDelete">批量删除</button>
@@ -1109,12 +1075,8 @@ const cfg = computed(() => configStore.config)
     </Modal>
 
     <!-- Book Info Modal -->
-    <BookInfoModal
-      v-if="showBookInfo && bookInfoId"
-      :book="bookStore.books.find(b => b.id === bookInfoId)!"
-      @close="showBookInfo = false"
-      @saved="onBookInfoSaved"
-    />
+    <BookInfoModal v-if="showBookInfo && bookInfoBook" :book="bookInfoBook" @close="showBookInfo = false"
+      @saved="onBookInfoSaved" />
 
     <!-- Toast -->
     <Toast :message="toastMsg" :type="toastType" />
@@ -1236,7 +1198,9 @@ const cfg = computed(() => configStore.config)
   border-bottom: 1px solid var(--c-border);
 }
 
-.category-bar::-webkit-scrollbar { display: none; }
+.category-bar::-webkit-scrollbar {
+  display: none;
+}
 
 .category-tab {
   padding: 5px 12px;
@@ -1346,7 +1310,9 @@ const cfg = computed(() => configStore.config)
   opacity: 0.7;
 }
 
-.shelf-grid.list-mode .add-sub { display: none; }
+.shelf-grid.list-mode .add-sub {
+  display: none;
+}
 
 .spinner {
   width: 20px;
@@ -1408,7 +1374,9 @@ const cfg = computed(() => configStore.config)
   transition: background 0.12s var(--ease-out);
 }
 
-.chapter-item:hover { background: var(--c-surface-sunken); }
+.chapter-item:hover {
+  background: var(--c-surface-sunken);
+}
 
 .chapter-item.current {
   background: var(--c-accent-soft);
@@ -1427,10 +1395,27 @@ const cfg = computed(() => configStore.config)
   font-family: var(--font-mono);
 }
 
-.ch-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-.form-modal { display: flex; flex-direction: column; gap: 10px; }
-.form-label { font-size: 12px; font-weight: 600; color: var(--c-ink-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+.form-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-ink-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .form-input {
   border: 1px solid var(--c-border);
   background: var(--c-surface);
@@ -1440,12 +1425,23 @@ const cfg = computed(() => configStore.config)
   font-size: 13px;
   transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
+
 .form-input:focus {
   border-color: var(--c-accent);
   box-shadow: 0 0 0 3px var(--c-accent-soft);
 }
-.form-hint { font-size: 11px; color: var(--c-ink-tertiary); }
-.form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+
+.form-hint {
+  font-size: 11px;
+  color: var(--c-ink-tertiary);
+}
+
+.form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
 
 .category-tags {
   display: flex;
@@ -1476,28 +1472,42 @@ const cfg = computed(() => configStore.config)
   border-color: var(--c-accent);
 }
 
-.btn-primary, .btn-secondary, .btn-danger {
+.btn-primary,
+.btn-secondary,
+.btn-danger {
   padding: 7px 18px;
   border-radius: var(--radius-sm);
   font-size: 13px;
   font-weight: 500;
   transition: all 0.15s var(--ease-out);
 }
+
 .btn-primary {
   background: var(--c-accent);
   color: var(--c-ink-inverse);
 }
-.btn-primary:hover { background: var(--c-accent-hover); }
+
+.btn-primary:hover {
+  background: var(--c-accent-hover);
+}
+
 .btn-secondary {
   background: var(--c-surface-sunken);
   color: var(--c-ink);
 }
-.btn-secondary:hover { background: var(--c-border); }
+
+.btn-secondary:hover {
+  background: var(--c-border);
+}
+
 .btn-danger {
   background: var(--c-danger);
   color: var(--c-ink-inverse);
 }
-.btn-danger:hover { opacity: 0.85; }
+
+.btn-danger:hover {
+  opacity: 0.85;
+}
 
 .drop-file-list {
   display: flex;
@@ -1573,12 +1583,20 @@ const cfg = computed(() => configStore.config)
   background: var(--c-surface-sunken);
   color: var(--c-ink);
 }
-.batch-actions .btn-secondary:hover:not(:disabled) { background: var(--c-border); }
+
+.batch-actions .btn-secondary:hover:not(:disabled) {
+  background: var(--c-border);
+}
+
 .batch-actions .btn-danger {
   background: var(--c-danger);
   color: var(--c-ink-inverse);
 }
-.batch-actions .btn-danger:hover:not(:disabled) { opacity: 0.85; }
+
+.batch-actions .btn-danger:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
 .batch-actions .btn-secondary:disabled,
 .batch-actions .btn-danger:disabled {
   opacity: 0.4;
@@ -1590,7 +1608,10 @@ const cfg = computed(() => configStore.config)
   font-size: 13px;
   padding: 7px 12px;
 }
-.batch-actions .btn-ghost:hover { color: var(--c-ink); }
+
+.batch-actions .btn-ghost:hover {
+  color: var(--c-ink);
+}
 
 .select-all-btn {
   font-weight: 600;

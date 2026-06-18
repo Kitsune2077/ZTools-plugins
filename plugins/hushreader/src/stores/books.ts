@@ -110,7 +110,12 @@ export const useBookStore = defineStore('books', () => {
   }
 
   function addBook(book: Omit<Book, 'id' | 'addedAt' | 'updatedAt'>) {
-    if (books.value.some(b => b.filePath === book.filePath)) return undefined
+    const filePathName = book.filePath.split(/[\\/]/).pop() ?? book.filePath
+    if (books.value.some(b => {
+      if (b.filePath === book.filePath) return true
+      const existingName = b.filePath.split(/[\\/]/).pop() ?? b.filePath
+      return existingName === filePathName
+    })) return undefined
     const now = Date.now()
     const newBook: Book = {
       ...book,

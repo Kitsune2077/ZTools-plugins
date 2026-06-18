@@ -83,19 +83,28 @@ function uploadCover() {
     reader.onload = () => {
       const data = reader.result as string
       emit('saved', { customCoverImage: data, updatedAt: Date.now() })
-      saveCustomCover(props.book.id, data).catch(() => {})
+      saveCustomCover(props.book.id, data).catch(() => { })
     }
     reader.readAsDataURL(file)
   }
   input.click()
 }
 
+function addCustomCategory() {
+  const val = editNewCategory.value.trim()
+  if (!val) return
+  const cats = val.split(/[,，]/).map(s => s.trim()).filter(Boolean)
+  cats.forEach(c => {
+    if (!editCategories.value.includes(c)) {
+      editCategories.value.push(c)
+    }
+  })
+  editNewCategory.value = ''
+}
+
 function saveEdit() {
-  const newCats = editNewCategory.value
-    .split(/[,，]/)
-    .map(s => s.trim())
-    .filter(Boolean)
-  const finalCats = [...new Set([...editCategories.value, ...newCats])]
+  addCustomCategory()
+  const finalCats = [...new Set(editCategories.value)]
 
   const updates: Partial<Book> = {
     title: editTitle.value.trim() || '未命名',
@@ -121,7 +130,8 @@ watch(() => props.book, () => {
         <h3 class="info-title">书籍信息</h3>
         <button class="info-close" @click="emit('close')">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
       </div>
@@ -129,19 +139,18 @@ watch(() => props.book, () => {
         <!-- Card 1: Cover + Title/Author -->
         <div class="info-card">
           <div class="cover-section">
-            <div
-              v-if="!isEditing"
-              class="cover-thumb"
-              :style="displayCover ? {} : { background: book.coverColor || '#4a7fa5' }"
-            >
-              <img v-if="displayCover" :src="displayCover" :alt="book.title" class="cover-img" @error="imgError = true" />
+            <div v-if="!isEditing" class="cover-thumb"
+              :style="displayCover ? {} : { background: book.coverColor || '#4a7fa5' }">
+              <img v-if="displayCover" :src="displayCover" :alt="book.title" class="cover-img"
+                @error="imgError = true" />
               <template v-else>
                 <span class="cover-format">{{ book.format.toUpperCase() }}</span>
                 <span class="cover-title-text">{{ book.title }}</span>
               </template>
             </div>
             <div v-else class="cover-thumb editable" @click="uploadCover">
-              <img v-if="displayCover" :src="displayCover" :alt="book.title" class="cover-img" @error="imgError = true" />
+              <img v-if="displayCover" :src="displayCover" :alt="book.title" class="cover-img"
+                @error="imgError = true" />
               <template v-else>
                 <span class="cover-format">{{ book.format.toUpperCase() }}</span>
                 <span class="cover-title-text">{{ book.title }}</span>
@@ -187,26 +196,22 @@ watch(() => props.book, () => {
           </template>
           <template v-else>
             <div v-if="existingCategories.length" class="edit-category-pick">
-              <button
-                v-for="cat in existingCategories"
-                :key="cat"
-                class="category-chip toggleable"
-                :class="{ active: editCategories.includes(cat) }"
-                @click="toggleEditCategory(cat)"
-              >{{ cat }}</button>
+              <button v-for="cat in existingCategories" :key="cat" class="category-chip toggleable"
+                :class="{ active: editCategories.includes(cat) }" @click="toggleEditCategory(cat)">{{ cat }}</button>
             </div>
             <div class="edit-category-tags" style="margin-top: 8px">
-              <button
-                v-for="cat in editCategories.filter(c => !existingCategories.includes(c))"
-                :key="cat"
-                class="category-chip removable"
-                @click="toggleEditCategory(cat)"
-              >
+              <button v-for="cat in editCategories.filter(c => !existingCategories.includes(c))" :key="cat"
+                class="category-chip removable" @click="toggleEditCategory(cat)">
                 {{ cat }}
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
               </button>
             </div>
-            <input v-model="editNewCategory" class="edit-input" placeholder="新分类，逗号分隔..." style="margin-top: 8px" />
+            <input v-model="editNewCategory" class="edit-input" placeholder="新分类，回车或逗号添加..." style="margin-top: 8px"
+              @keydown.enter.prevent="addCustomCategory" @keydown.comma.prevent="addCustomCategory"
+              @blur="addCustomCategory" />
           </template>
         </div>
 
@@ -308,6 +313,7 @@ watch(() => props.book, () => {
   color: var(--c-ink-tertiary);
   transition: background 0.12s var(--ease-out), color 0.12s var(--ease-out);
 }
+
 .info-close:hover {
   background: var(--c-surface-sunken);
   color: var(--c-ink);
@@ -606,7 +612,8 @@ watch(() => props.book, () => {
   flex-shrink: 0;
 }
 
-.btn-primary, .btn-secondary {
+.btn-primary,
+.btn-secondary {
   padding: 7px 20px;
   border-radius: var(--radius-sm);
   font-size: 13px;
@@ -618,11 +625,17 @@ watch(() => props.book, () => {
   background: var(--c-accent);
   color: var(--c-ink-inverse);
 }
-.btn-primary:hover { background: var(--c-accent-hover); }
+
+.btn-primary:hover {
+  background: var(--c-accent-hover);
+}
 
 .btn-secondary {
   background: var(--c-surface-sunken);
   color: var(--c-ink);
 }
-.btn-secondary:hover { background: var(--c-border); }
+
+.btn-secondary:hover {
+  background: var(--c-border);
+}
 </style>

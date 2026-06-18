@@ -350,7 +350,7 @@ function toast(msg: string, type: 'info' | 'error' | 'success' = 'info') {
 function closePlugin() {
   isReaderHidden.value = true
   hushreaderActivated.value = false
-  try { (window as any).ztools?.outPlugin?.() } catch {}
+  try { (window as any).ztools?.outPlugin?.() } catch { }
 }
 
 function saveReadingProgress() {
@@ -367,31 +367,40 @@ function saveReadingProgress() {
   if (!book.firstReadAt) {
     updates.firstReadAt = now
   }
-  if (book.lastReadAt && book.lastReadAt > 0) {
-    const elapsed = now - book.lastReadAt
-    if (elapsed > 0 && elapsed < 30 * 60 * 1000) {
-      const totalMs = (book.readingTimeMs || 0) + elapsed
-      updates.readingTimeMs = totalMs
-      const totalChars = readerStore.chapters.reduce((sum, ch) => sum + ch.content.length, 0)
-      const currentReadChars = Math.round(totalChars * (readerStore.readingPercent / 100))
-      const prevReadChars = book.lastSaveReadChars || 0
-      const deltaChars = Math.max(0, currentReadChars - prevReadChars)
-      updates.lastSaveReadChars = currentReadChars
-      const elapsedMinutes = elapsed / 60000
-      if (elapsedMinutes > 0 && deltaChars > 0) {
-        const sessionSpeed = deltaChars / elapsedMinutes
-        const prevSpeed = book.readingSpeed || 0
-        if (prevSpeed > 0) {
-          updates.readingSpeed = Math.round(prevSpeed * 0.6 + sessionSpeed * 0.4)
-        } else {
-          updates.readingSpeed = Math.round(sessionSpeed)
-        }
+
+  // 初始化或重置会话计时器，避免将跨会话的闲置时间计入阅读时长
+  if ((window as any).__hushreaderSessionBookId !== book.id) {
+    (window as any).__hushreaderSessionBookId = book.id;
+    (window as any).__hushreaderSessionLastActive = now
+  }
+
+  const lastActive = (window as any).__hushreaderSessionLastActive || now
+  const elapsed = now - lastActive
+
+  if (elapsed > 0 && elapsed < 30 * 60 * 1000) {
+    const totalMs = (book.readingTimeMs || 0) + elapsed
+    updates.readingTimeMs = totalMs
+    const totalChars = readerStore.chapters.reduce((sum, ch) => sum + ch.content.length, 0)
+    const currentReadChars = Math.round(totalChars * (readerStore.readingPercent / 100))
+    const prevReadChars = book.lastSaveReadChars || 0
+    const deltaChars = Math.max(0, currentReadChars - prevReadChars)
+    updates.lastSaveReadChars = currentReadChars
+    const elapsedMinutes = elapsed / 60000
+    if (elapsedMinutes > 0 && deltaChars > 0) {
+      const sessionSpeed = deltaChars / elapsedMinutes
+      const prevSpeed = book.readingSpeed || 0
+      if (prevSpeed > 0) {
+        updates.readingSpeed = Math.round(prevSpeed * 0.6 + sessionSpeed * 0.4)
+      } else {
+        updates.readingSpeed = Math.round(sessionSpeed)
       }
     }
   } else {
     const totalChars = readerStore.chapters.reduce((sum, ch) => sum + ch.content.length, 0)
     updates.lastSaveReadChars = Math.round(totalChars * (readerStore.readingPercent / 100))
   }
+
+  (window as any).__hushreaderSessionLastActive = now
   bookStore.updateBook(book.id, updates)
 }
 
@@ -450,7 +459,7 @@ async function openBookAndHushreader(bookId: string) {
     if (!chapters || fileChanged) {
       chapters = await parseBookAndGetChapters(book)
       if (!chapters) return
-      saveChapters(bookId, chapters).catch(() => {})
+      saveChapters(bookId, chapters).catch(() => { })
     }
 
     readerStore.setChapters(chapters)
@@ -657,17 +666,17 @@ watch(
 onMounted(async () => {
   await configStore.load()
   await bookStore.load()
-  ;(window as any).ztools?.onPluginEnter?.((action: any) => {
-    route.value = action.code
-    enterAction.value = action
-  })
-  ;(window as any).ztools?.onPluginOut?.((processExit: boolean) => {
-    if (processExit) {
-      saveReadingProgress()
-      hushreaderActivated.value = false
-      hushreaderWindow?.close?.()
-    }
-  })
+    ; (window as any).ztools?.onPluginEnter?.((action: any) => {
+      route.value = action.code
+      enterAction.value = action
+    })
+    ; (window as any).ztools?.onPluginOut?.((processExit: boolean) => {
+      if (processExit) {
+        saveReadingProgress()
+        hushreaderActivated.value = false
+        hushreaderWindow?.close?.()
+      }
+    })
   offHushreaderCommand = (window as any).services?.onHushreaderCommand?.(handleHushreaderCommand)
 
   if (!route.value) route.value = 'bookshelf'
@@ -681,8 +690,6 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Bookshelf
-    :enter-action="enterAction"
-  />
+  <Bookshelf :enter-action="enterAction" />
   <Toast :message="toastMsg" :type="toastType" />
 </template>

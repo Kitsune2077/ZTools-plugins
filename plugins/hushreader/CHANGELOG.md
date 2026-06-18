@@ -18,6 +18,12 @@ All notable changes to this project will be documented in this file.
 - **阅读进度追踪**：保存阅读进度时记录首次阅读时间（firstReadAt）、累计阅读时长（readingTimeMs）、阅读速度（readingSpeed）
 - **updatedAt 时间戳**：书籍新增时设置 updatedAt = addedAt，编辑元数据或上传封面时更新 updatedAt，分类变更不更新 updatedAt
 
+### Fixed
+- **修复拖拽文件时的路径保存错误**：修复了在拖拽文件导入书籍时，路径保存错误导致相同书籍可以重复导入的问题
+- **阅读时长与速度统计逻辑修复**：修复了新会话第一页阅读时间丢失和闲置/关闭期间时间被错误计入的问题，确保阅读时长和速度统计准确。
+- **MOBI 封面缓存失效与重复解析性能问题**：修复了每次打开书架时，所有 MOBI 书籍都会被重新解析一次的问题。
+- **文件读取失败时导致元数据被静默清空**：修复了在文件读取失败时，元数据被静默清空的问题，确保元数据完整。
+- **修复书籍信息编辑时分类交互缺陷**：修复了在书籍信息编辑时，分类交互存在的缺陷。
 
 ## [1.3.1](https://github.com/me1dlinger/hushreader/releases/tag/v1.3.1) - 2026-06-17
 
