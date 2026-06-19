@@ -58,7 +58,10 @@ export interface OtherConfig {
   listMode: boolean
   chapterRegex: string
   customFonts: string[]
-  theme: 'light' | 'dark'
+  theme: 'light' | 'dark' | 'auto'
+  timerEnabled: boolean
+  timerMinutes: number
+  showImages: boolean
 }
 
 export interface ReaderConfig {
@@ -112,7 +115,10 @@ const DEFAULT_CONFIG: ReaderConfig = {
     listMode: false,
     chapterRegex: '',
     customFonts: [],
-    theme: 'light'
+    theme: 'auto',
+    timerEnabled: false,
+    timerMinutes: 30,
+    showImages: false
   },
   appearance: {
     fontSize: 16,
@@ -157,6 +163,10 @@ function storageSet(key: string, value: string) {
 
 export const useConfigStore = defineStore('config', () => {
   const config = ref<ReaderConfig>(structuredClone(DEFAULT_CONFIG))
+  const configList = ref<{ name: string; config: ReaderConfig }[]>([
+    { name: '默认配置', config: structuredClone(DEFAULT_CONFIG) }
+  ])
+  const activeConfigIndex = ref(0)
 
   function load() {
     const data = storageGet('hushreader_config')
@@ -171,10 +181,38 @@ export const useConfigStore = defineStore('config', () => {
         config.value = deepMerge(structuredClone(DEFAULT_CONFIG), saved)
       } catch { }
     }
+    const listData = storageGet('hushreader_config_list')
+    if (listData) {
+      try {
+        const parsed = JSON.parse(listData)
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          configList.value = parsed
+        }
+      } catch { }
+    }
+    const idxData = storageGet('hushreader_active_config')
+    if (idxData) {
+      const idx = parseInt(idxData, 10)
+      if (Number.isFinite(idx) && idx >= 0 && idx < configList.value.length) {
+        activeConfigIndex.value = idx
+      }
+    }
+    if (configList.value.length > 0) {
+      const active = configList.value[activeConfigIndex.value]
+      if (active?.config) {
+        config.value = deepMerge(structuredClone(DEFAULT_CONFIG), active.config)
+      }
+    }
   }
 
   function save() {
     storageSet('hushreader_config', JSON.stringify(config.value))
+    if (configList.value[activeConfigIndex.value]) {
+      configList.value[activeConfigIndex.value].config = JSON.parse(JSON.stringify(config.value))
+      configList.value[activeConfigIndex.value].name = config.value.other.configName || configList.value[activeConfigIndex.value].name
+    }
+    storageSet('hushreader_config_list', JSON.stringify(configList.value))
+    storageSet('hushreader_active_config', String(activeConfigIndex.value))
   }
 
   function resetToDefault() {
@@ -182,7 +220,55 @@ export const useConfigStore = defineStore('config', () => {
     save()
   }
 
-  return { config, load, save, resetToDefault, DEFAULT_CONFIG }
+  function switchConfig(index: number) {
+    if (index < 0 || index >= configList.value.length) return
+    if (configList.value[activeConfigIndex.value]) {
+      configList.value[activeConfigIndex.value].config = JSON.parse(JSON.stringify(config.value))
+    }
+    activeConfigIndex.value = index
+    const target = configList.value[index]
+    config.value = deepMerge(structuredClone(DEFAULT_CONFIG), target.config)
+    save()
+  }
+
+  function addConfig(name: string) {
+    const newConfig = structuredClone(DEFAULT_CONFIG)
+    newConfig.other.configName = name
+    configList.value.push({ name, config: newConfig })
+    const newIndex = configList.value.length - 1
+    switchConfig(newIndex)
+  }
+
+  function removeConfig(index: number) {
+    if (configList.value.length <= 1) return
+    configList.value.splice(index, 1)
+    if (activeConfigIndex.value >= configList.value.length) {
+      activeConfigIndex.value = configList.value.length - 1
+    } else if (activeConfigIndex.value === index) {
+      activeConfigIndex.value = Math.min(index, configList.value.length - 1)
+    } else if (activeConfigIndex.value > index) {
+      activeConfigIndex.value--
+    }
+    const target = configList.value[activeConfigIndex.value]
+    config.value = deepMerge(structuredClone(DEFAULT_CONFIG), target.config)
+    save()
+  }
+
+  function renameConfig(index: number, name: string) {
+    if (configList.value[index]) {
+      configList.value[index].name = name
+      if (index === activeConfigIndex.value) {
+        config.value.other.configName = name
+      }
+      save()
+    }
+  }
+
+  return {
+    config, configList, activeConfigIndex,
+    load, save, resetToDefault,
+    switchConfig, addConfig, removeConfig, renameConfig, DEFAULT_CONFIG
+  }
 })
 
 function deepMerge(target: any, source: any): any {

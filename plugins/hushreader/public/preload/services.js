@@ -170,5 +170,18 @@ window.services = {
     )
     fs.writeFileSync(filePath, text, { encoding: 'utf-8' })
     return filePath
+  },
+
+  writeFileToPath(filePath, content, encoding) {
+    const fullPath = path.resolve(filePath)
+    const dir = path.dirname(fullPath)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(fullPath, content, { encoding: encoding || 'utf-8' })
+    return fullPath
+  },
+
+  readFileFromPath(filePath) {
+    const fullPath = path.resolve(filePath)
+    return fs.readFileSync(fullPath, 'utf-8')
   }
 }

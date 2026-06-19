@@ -153,6 +153,18 @@ function confirmPath() {
   toast('路径已更新', 'success')
 }
 
+function openFileLocation(bookId: string) {
+  closeContextMenu()
+  const book = bookStore.books.find(b => b.id === bookId)
+  if (!book) return
+  try {
+    const result = (window as any).ztools?.shellShowItemInFolder?.(book.filePath)
+    if (!result) toast('无法打开文件位置', 'error')
+  } catch {
+    toast('无法打开文件位置', 'error')
+  }
+}
+
 // Category modal
 const showCategoryModal = ref(false)
 const categoryModalBookId = ref<string | null>(null)
@@ -946,10 +958,10 @@ const cfg = computed(() => configStore.config)
     <!-- Context Menu -->
     <ContextMenu v-if="contextMenuBook" :pos="contextMenuPos" @book-info="openBookInfo(contextMenuBook!)"
       @chapter-list="openChapterList(contextMenuBook!)" @change-path="openPathModal(contextMenuBook!)"
-      @edit-metadata="openMetadataModal(contextMenuBook!)" @reload-metadata="openReloadMetadata(contextMenuBook!)"
-      @set-category="openCategoryModal(contextMenuBook!)" @set-cover="openCoverPicker(contextMenuBook!)"
-      @restore-cover="openRestoreCover(contextMenuBook!)" @delete="openDeleteModal(contextMenuBook!)"
-      @close="closeContextMenu" />
+      @open-file-location="openFileLocation(contextMenuBook!)" @edit-metadata="openMetadataModal(contextMenuBook!)"
+      @reload-metadata="openReloadMetadata(contextMenuBook!)" @set-category="openCategoryModal(contextMenuBook!)"
+      @set-cover="openCoverPicker(contextMenuBook!)" @restore-cover="openRestoreCover(contextMenuBook!)"
+      @delete="openDeleteModal(contextMenuBook!)" @close="closeContextMenu" />
 
     <!-- Settings Modal -->
     <SettingsModal v-if="showSettings" @close="showSettings = false" />

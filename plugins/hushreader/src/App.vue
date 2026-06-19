@@ -56,6 +56,8 @@ const toastMsg = ref('')
 const toastType = ref<'info' | 'error' | 'success'>('info')
 let toastTimer = 0
 let autoTimer = 0
+let readingTimer = 0
+let readingTimerStart = 0
 let isAutoPageTickRunning = false
 
 let hushreaderWindow: AppBrowserWindow | null = null
@@ -215,7 +217,9 @@ function getHushreaderPayload(bounds = getHushreaderWindowBounds()) {
       autoFlipEnabled: hushreaderCfg.value.autoFlipEnabled,
       fontFamily: hushreaderCfg.value.fontFamily,
       windowMovable: cfg.value.function.windowMovable,
-      windowSizeLocked: cfg.value.function.windowSizeLocked
+      windowSizeLocked: cfg.value.function.windowSizeLocked,
+      timerEnabled: cfg.value.other.timerEnabled,
+      timerRemaining: getReadingTimerRemaining()
     }
   }
 }
@@ -289,7 +293,6 @@ function ensureHushreaderWindow(options?: { skipShow?: boolean }) {
       hasShadow: false,
       focusable: true,
       acceptFirstMouse: true,
-      alwayOnTop: true,
       alwaysOnTop: true,
       webPreferences: {
         devTools: false,
@@ -313,6 +316,7 @@ function showHushreaderWindow() {
 function hideHushreaderWindow() {
   isReaderHidden.value = true
   blurHushreaderKeyboard()
+  stopReadingTimer()
 }
 
 function focusHushreaderKeyboard() {
@@ -347,9 +351,35 @@ function toast(msg: string, type: 'info' | 'error' | 'success' = 'info') {
   toastTimer = window.setTimeout(() => { toastMsg.value = '' }, 3000)
 }
 
+function startReadingTimer() {
+  stopReadingTimer()
+  if (!cfg.value.other.timerEnabled || !hushreaderActivated.value) return
+  readingTimerStart = Date.now()
+  const ms = cfg.value.other.timerMinutes * 60 * 1000
+  readingTimer = window.setTimeout(() => {
+    hideHushreaderWindow()
+    toast(`阅读定时器已到 ${cfg.value.other.timerMinutes} 分钟`, 'info')
+    readingTimerStart = 0
+  }, ms)
+}
+
+function stopReadingTimer() {
+  clearTimeout(readingTimer)
+  readingTimer = 0
+  readingTimerStart = 0
+}
+
+function getReadingTimerRemaining(): number | null {
+  if (!readingTimerStart || !cfg.value.other.timerEnabled) return null
+  const elapsed = Date.now() - readingTimerStart
+  const total = cfg.value.other.timerMinutes * 60 * 1000
+  return Math.max(0, total - elapsed)
+}
+
 function closePlugin() {
   isReaderHidden.value = true
   hushreaderActivated.value = false
+  stopReadingTimer()
   try { (window as any).ztools?.outPlugin?.() } catch { }
 }
 
@@ -475,6 +505,7 @@ async function openBookAndHushreader(bookId: string) {
     hushreaderActivated.value = true
     isReaderHidden.value = false
     ensureHushreaderWindow()
+    startReadingTimer()
     nextTick(() => {
       pushHushreaderState()
     })
@@ -685,6 +716,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   saveReadingProgress()
   window.clearInterval(autoTimer)
+  stopReadingTimer()
   offHushreaderCommand?.()
 })
 </script>

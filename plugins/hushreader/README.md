@@ -10,14 +10,22 @@
 
 ***
 
+[更新日志](./CHANGELOG.md)
+
+***
+
 ## 功能一览
 
 | 阅读体验                | 个性化              | 书架管理              |
 | :------------------ | :--------------- | :---------------- |
-| 沉浸式悬浮窗口，可置于任意位置     | 背景透明度与整体透明度分离控制  | 支持按添加时间、书名、作者排序   |
-| 滚轮翻页 / 快捷键翻页 / 自动翻页 | 自定义字体，支持添加系统字体   | 右键编辑元数据（标题、作者） |
+| 沉浸式悬浮窗口，可置于任意位置     | 背景透明度与整体透明度分离控制  | 支持按添加时间、书名、作者、最近阅读排序 |
+| 滚轮翻页 / 快捷键翻页 / 自动翻页 | 自定义字体，支持添加系统字体   | 右键编辑元数据（标题、作者、分类） |
 | 只显示完整行，文字不残缺       | 十六进制颜色输入 + 颜色选择器 | 阅读进度持久化，关闭再开继续读   |
-| 文本预处理：压缩空行、清理空白     | 设置实时预览，取消可还原     | —                 |
+| 文本预处理：压缩空行、清理空白     | 设置实时预览，取消可还原     | 拖拽导入 / 快捷文件导入（`导入书籍`） |
+| 鼠标移出隐藏三模式（关闭/仅进度/全隐藏） | 亮色 / 暗色主题切换     | 书籍信息窗口（封面、简介、分类、阅读统计） |
+| 鼠标移入显示延迟可调         | 列表书架模式           | 多选模式 + 批量重载/删除    |
+| 百分比进度编辑跳转          | 窗口大小锁定           | 重载元数据 / 恢复封面      |
+| 章节列表高亮当前进度         | —                | 书籍分类筛选栏            |
 
 ## 截图
 
@@ -34,7 +42,8 @@
 
 ### 安装
 
-下载release文件，在ZTools中导入
+- 已上架市场，ZTools插件市场搜索**隐阅盒**，点击**安装**按钮
+- 下载github-release文件，在ZTools**搜索框**完成导入
 
 ### 开发
 
@@ -48,7 +57,7 @@ npm run build    # 构建生产版本
 
 在 ZTools 中输入以下关键词即可唤起：
 
-`yyh` · `摸鱼阅读` · `隐阅盒` · `书架` · `hushreader`
+`隐阅盒` · `hushreader` · `摸鱼阅读` · `书架` · `yyh` · `开始阅读` · `导入书籍`（支持拖入 txt/epub/mobi 文件）
 
 ## 技术细节
 
@@ -57,18 +66,27 @@ npm run build    # 构建生产版本
 
 阅读进度使用**字符偏移量**（`progressIndex`）而非页码保存，窗口大小或字体变化时进度不会丢失。
 
-**存储策略**：优先使用 `ztools.dbStorage`，回退到 `localStorage`。
+**存储策略**：轻量数据（书籍列表不含封面、阅读进度、配置）使用 `ztools.dbStorage`，回退到 `localStorage`；封面和章节内容使用 `ztools.db`（PouchDB 风格数据库），通过 `ztools.db.promises` API 管理 `cover_{bookId}`、`custom_cover_{bookId}`、`chapters_{bookId}` 等文档。
 
 **保存时机**：翻页时 · 章节切换时 · 自动翻页 tick · 插件退出时
 
 **每本书保存**：
 
-| 字段              | 说明       |
-| --------------- | -------- |
-| `lastChapter`   | 当前章节索引   |
-| `progressIndex` | 章节内字符偏移量 |
-| `lastReadAt`    | 最后阅读时间戳  |
-| `totalChapters` | 总章节数     |
+| 字段                 | 说明          |
+| ------------------ | ----------- |
+| `lastChapter`      | 当前章节索引      |
+| `progressIndex`    | 章节内字符偏移量    |
+| `lastReadAt`       | 最后阅读时间戳     |
+| `totalChapters`    | 总章节数        |
+| `firstReadAt`      | 首次阅读时间戳     |
+| `readingTimeMs`    | 累计阅读时长（毫秒）  |
+| `readingSpeed`     | 阅读速度（字/分钟）  |
+| `readingPercent`   | 阅读百分比       |
+| `updatedAt`        | 更新时间戳       |
+| `description`      | 书籍简介        |
+| `categories`       | 分类数组        |
+| `customCoverImage` | 自定义封面       |
+| `fileModifiedAt`   | 文件修改时间      |
 
 </details>
 
@@ -177,14 +195,14 @@ HTML/纯文本判断 → 分章解析或按 TXT 逻辑处理
 ├── src/
 │   ├── App.vue                   # 根组件
 │   ├── main.ts                   # 应用入口
-│   ├── main.css                   # 应用样式
-│   ├── env.d.ts                   #环境变量类型定义
+│   ├── main.css                  # 应用样式
+│   ├── env.d.ts                  # 环境变量类型定义
 │   ├── stores/
 │   │   ├── books.ts              # 书籍数据 + 持久化
 │   │   ├── config.ts             # 配置数据 + 持久化
 │   │   └── reader.ts             # 阅读器状态 + 分页
 │   ├── utils/
-│   │   ├── db.ts                 # 数据库操作工具
+│   │   ├── db.ts                 # 数据库操作工具（封面/章节缓存）
 │   │   ├── txtParser.ts          # TXT 解析 + 分页 + 预处理
 │   │   ├── epubParser.ts         # EPUB 解析
 │   │   └── mobiParser.ts         # MOBI 解析 + 加密检测 + 封面提取
@@ -192,17 +210,21 @@ HTML/纯文本判断 → 分章解析或按 TXT 逻辑处理
 │       ├── Bookshelf/            # 书架组件
 │       │   ├── index.vue
 │       │   ├── BookCard.vue
-│       │   ├── ContextMenu.vue
-│       │   ├── Modal.vue
-│       │   └── Toast.vue
+│       │   ├── BookInfoModal.vue # 书籍信息窗口
+│       │   ├── ContextMenu.vue   # 右键菜单
+│       │   ├── Modal.vue         # 通用弹窗
+│       │   ├── ThemeToggle.vue   # 主题切换
+│       │   └── Toast.vue         # Toast 提示
 │       └── Settings/             # 设置面板
 │           └── index.vue
 ├── .gitignore
+├── CHANGELOG.md                  # 更新日志
 ├── LICENSE
 ├── package.json
 ├── tsconfig.json
 ├── tsconfig.node.json
-└── vite.config.ts
+├── vite.config.ts
+└── ztools.api.md                 # ZTools API 文档
 ```
 
 ## 开源协议

@@ -28,6 +28,8 @@ interface Services {
   readFileBinary: (filePath: string) => Buffer
   getFileInfo: (filePath: string) => FileInfoResult
   writeTextFile: (text: string) => string
+  writeFileToPath: (filePath: string, content: string, encoding?: string) => string
+  readFileFromPath: (filePath: string) => string
   writeImageFile: (imageData: any) => string
   onHushreaderCommand: (handler: (command: any) => void) => () => void
   getFileModifiedTime: (filePath: string) => number

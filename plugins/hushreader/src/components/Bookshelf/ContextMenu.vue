@@ -6,6 +6,7 @@ const emit = defineEmits<{
   'book-info': []
   'chapter-list': []
   'change-path': []
+  'open-file-location': []
   'edit-metadata': []
   'reload-metadata': []
   'set-category': []
@@ -53,6 +54,10 @@ watch(
       <li class="ctx-item" @click="emit('change-path')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         修改本地路径
+      </li>
+      <li class="ctx-item" @click="emit('open-file-location')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        打开文件位置
       </li>
       <li class="ctx-item" @click="emit('edit-metadata')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>

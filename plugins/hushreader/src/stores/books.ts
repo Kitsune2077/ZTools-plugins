@@ -132,7 +132,7 @@ export const useBookStore = defineStore('books', () => {
     books.value = books.value.filter(b => b.id !== id)
     if (currentBookId.value === id) currentBookId.value = null
     save()
-    removeBookData(id).catch(() => {})
+    removeBookData(id).catch(() => { })
   }
 
   function updateBook(id: string, updates: Partial<Book>) {
@@ -192,6 +192,6 @@ export const useBookStore = defineStore('books', () => {
   return {
     books, currentBookId, currentBook,
     sortBy, searchQuery, activeCategory, filteredBooks, categories,
-    load, addBook, removeBook, updateBook, setCurrentBook
+    load, addBook, removeBook, updateBook, setCurrentBook, save
   }
 })

@@ -384,6 +384,26 @@
       background: transparent;
       color: var(--hushreader-text-color);
     }
+
+    .hushreader-timer {
+      position: absolute;
+      top: 4px;
+      left: 10px;
+      z-index: 4;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 10px;
+      line-height: 1.3;
+      opacity: 0;
+      pointer-events: none;
+      color: var(--hushreader-text-color);
+      font-variant-numeric: tabular-nums;
+      transition: opacity 120ms ease;
+    }
+
+    .show-timer .hushreader-timer {
+      opacity: 0.66;
+    }
   </style>
 </head>
 
@@ -396,6 +416,7 @@
       </div>
       <button class="hushreader-hit next" type="button" aria-label="下一页" data-command="next"></button>
       <div id="hushreaderMeta" class="hushreader-meta"></div>
+      <div id="hushreaderTimer" class="hushreader-timer"></div>
       <div class="hushreader-resize-zone height" data-resize="height" aria-hidden="true"></div>
       <div class="hushreader-resize-zone width" data-resize="width" aria-hidden="true"></div>
       <div class="hushreader-resize-zone corner" data-resize="both" aria-hidden="true"></div>
@@ -408,6 +429,7 @@
     const root = document.getElementById("hushreader")
     const linesNode = document.getElementById("hushreaderLines")
     const metaNode = document.getElementById("hushreaderMeta")
+    const timerNode = document.getElementById("hushreaderTimer")
     const sizeHintNode = document.getElementById("hushreaderSizeHint")
     const contextMenuNode = document.getElementById("hushreaderContextMenu")
 
@@ -427,6 +449,37 @@
     let isKeyboardActive = false
     let isProgressEditing = false
     let isAutoPaging = false
+    let timerRemaining = null
+    let timerTickInterval = 0
+
+    function formatTimer(ms) {
+      if (ms == null || ms <= 0) return ''
+      const totalSec = Math.ceil(ms / 1000)
+      const min = Math.floor(totalSec / 60)
+      const sec = totalSec % 60
+      return `${min}:${String(sec).padStart(2, '0')}`
+    }
+
+    function startTimerTick() {
+      clearInterval(timerTickInterval)
+      if (timerRemaining == null || timerRemaining <= 0) {
+        timerNode.textContent = ''
+        root.classList.remove('show-timer')
+        return
+      }
+      root.classList.add('show-timer')
+      timerNode.textContent = formatTimer(timerRemaining)
+      timerTickInterval = setInterval(() => {
+        timerRemaining = Math.max(0, timerRemaining - 1000)
+        if (timerRemaining <= 0) {
+          clearInterval(timerTickInterval)
+          timerNode.textContent = ''
+          root.classList.remove('show-timer')
+        } else {
+          timerNode.textContent = formatTimer(timerRemaining)
+        }
+      }, 1000)
+    }
 
     function sendCommand(command) {
       if (window.ztools?.sendToParent) {
@@ -718,6 +771,12 @@
       if (!visible || !hideMode || hideMode === 'off') isAutoHidden = false
 
       isAutoPaging = Boolean(settings.autoFlipEnabled)
+
+      const newTimerRemaining = settings.timerEnabled ? settings.timerRemaining : null
+      if (newTimerRemaining !== timerRemaining) {
+        timerRemaining = newTimerRemaining
+        startTimerTick()
+      }
 
       root.className = [
         "hushreader-shell",
