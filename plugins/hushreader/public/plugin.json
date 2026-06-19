@@ -2,7 +2,7 @@
   "$schema": "node_modules/@ztools-center/ztools-api-types/resource/ztools.schema.json",
   "name": "hushreader",
   "title": "隐阅盒",
-  "description": "隐阅盒，ZTools自己的摸鱼阅读，支持TXT/EPUB/MOBI格式，沉浸式阅读",
+  "description": "ZTools自己的摸鱼阅读，支持TXT/EPUB/MOBI格式，沉浸式阅读",
   "author": "meidlinger",
   "version": "1.3.3",
   "main": "index.html",

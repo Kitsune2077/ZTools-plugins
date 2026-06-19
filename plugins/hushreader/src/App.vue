@@ -58,6 +58,7 @@ let toastTimer = 0
 let autoTimer = 0
 let readingTimer = 0
 let readingTimerStart = 0
+let readingTimerWarning = 0
 let isAutoPageTickRunning = false
 
 let hushreaderWindow: AppBrowserWindow | null = null
@@ -262,6 +263,23 @@ function pushHushreaderState(options?: { skipShow?: boolean }) {
   })
 }
 
+let pendingNotificationCallback: (() => void) | null = null
+
+function pushHushreaderNotification(message: string, onClose?: () => void) {
+  if (!hushreaderWindow || hushreaderWindow.isDestroyed?.()) {
+    onClose?.()
+    return
+  }
+  pendingNotificationCallback = onClose ?? null
+  const sync = hushreaderWindow.webContents?.executeJavaScript?.(
+    `window.hushreaderShowNotification?.(${JSON.stringify(message)})`
+  )
+  void sync?.catch((error) => {
+    console.warn('[HushReader] notification push failed', error)
+    onClose?.()
+  })
+}
+
 function ensureHushreaderWindow(options?: { skipShow?: boolean }) {
   if (!hushreaderActivated.value || !(window as any).ztools?.createBrowserWindow || !currentBook.value) return
   if (hushreaderWindow && !hushreaderWindow.isDestroyed?.()) {
@@ -354,18 +372,36 @@ function toast(msg: string, type: 'info' | 'error' | 'success' = 'info') {
 function startReadingTimer() {
   stopReadingTimer()
   if (!cfg.value.other.timerEnabled || !hushreaderActivated.value) return
+  const minutes = Number(cfg.value.other.timerMinutes)
+  if (isNaN(minutes) || minutes <= 0) return
   readingTimerStart = Date.now()
-  const ms = cfg.value.other.timerMinutes * 60 * 1000
+  const ms = minutes * 60 * 1000
+  const warningMs = Math.round(ms * 0.9)
+  readingTimerWarning = window.setTimeout(() => {
+    const elapsed = Math.round((Date.now() - readingTimerStart) / 1000)
+    const remaining = Math.round((ms - (Date.now() - readingTimerStart)) / 1000)
+    const elapsedMin = Math.floor(elapsed / 60)
+    const elapsedSec = elapsed % 60
+    const remainingMin = Math.floor(remaining / 60)
+    const remainingSec = remaining % 60
+    const elapsedStr = elapsedMin > 0 ? `${elapsedMin}分${elapsedSec}秒` : `${elapsedSec}秒`
+    const remainingStr = remainingMin > 0 ? `${remainingMin}分${remainingSec}秒` : `${remainingSec}秒`
+    pushHushreaderNotification(`已阅读${elapsedStr}，${remainingStr}后将自动关闭`)
+  }, warningMs)
   readingTimer = window.setTimeout(() => {
-    hideHushreaderWindow()
-    toast(`阅读定时器已到 ${cfg.value.other.timerMinutes} 分钟`, 'info')
+    const elapsedMin = minutes
+    pushHushreaderNotification(`阅读定时器已到 ${elapsedMin} 分钟，即将关闭`, () => {
+      hideHushreaderWindow()
+    })
     readingTimerStart = 0
   }, ms)
 }
 
 function stopReadingTimer() {
   clearTimeout(readingTimer)
+  clearTimeout(readingTimerWarning)
   readingTimer = 0
+  readingTimerWarning = 0
   readingTimerStart = 0
 }
 
@@ -596,6 +632,7 @@ function handleHushreaderCommand(command: HushreaderCommand) {
   else if (command === 'show-main') { (window as any).ztools?.showMainWindow?.() }
   else if (command === 'stop-auto') { isAutoPaging.value = false; hushreaderCfg.value.autoFlipEnabled = false }
   else if (command === 'start-auto') { if (currentBook.value) { isAutoPaging.value = true; hushreaderCfg.value.autoFlipEnabled = true } }
+  else if (command === 'notification-close') { pendingNotificationCallback?.(); pendingNotificationCallback = null }
 }
 
 watch(

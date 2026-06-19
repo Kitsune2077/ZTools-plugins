@@ -272,15 +272,37 @@ async function importBooks() {
     if (Array.isArray(data.books)) {
       let added = 0
       let skipped = 0
+      const newBooks = []
       for (const book of data.books) {
-        if (bookStore.books.some(b => b.filePath === book.filePath)) {
+        const filePathName = book.filePath.split(/[\\/]/).pop() ?? book.filePath
+        const isDuplicate = bookStore.books.some(b => {
+          if (b.filePath === book.filePath) return true
+          const existingName = b.filePath.split(/[\\/]/).pop() ?? b.filePath
+          return existingName === filePathName
+        }) || newBooks.some(b => {
+          if (b.filePath === book.filePath) return true
+          const existingName = b.filePath.split(/[\\/]/).pop() ?? b.filePath
+          return existingName === filePathName
+        })
+
+        if (isDuplicate) {
           skipped++
           continue
         }
-        bookStore.addBook(book)
+
+        const now = Date.now()
+        newBooks.push({
+          ...book,
+          id: `book_${now}_${Math.random().toString(36).slice(2)}`,
+          addedAt: now,
+          updatedAt: now
+        })
         added++
       }
-      bookStore.save()
+      if (newBooks.length > 0) {
+        bookStore.books.unshift(...newBooks)
+        bookStore.save()
+      }
       if (added > 0) {
         const msg = skipped > 0
           ? `成功导入 ${added} 本书，跳过 ${skipped} 本重复`
@@ -302,6 +324,7 @@ async function importBooks() {
 
 function deepMerge(target: any, source: any): any {
   for (const key of Object.keys(source)) {
+    if (key === '__proto__' || key === 'constructor') continue
     if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
       if (!target[key]) target[key] = {}
       deepMerge(target[key], source[key])

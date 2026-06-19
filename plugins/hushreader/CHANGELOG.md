@@ -10,11 +10,17 @@ All notable changes to this project will be documented in this file.
 - **备份和恢复所有阅读进度与配置**：备份和恢复所有阅读进度与配置。插件设置导出，所有书籍的元数据导出。实现设置导入，书籍数据导入
 - **多配置切换**：实现多配置切换、添加和删除(最少保留一个配置)，导入的配置自动添加为新配置
 
-### Fixed
-- **配置无法导入的问题**：修复配置无法导入的问题
-
 ### Changed
 - **分离配置和书籍的导入导出**：将配置和书籍的导入导出分离，配置导入导出时仅和配置相关，书籍导入导出时仅和书籍数据相关
+- **定时器相关通知**：在隐阅界面弹出相应通知
+
+### Fixed
+- **配置无法导入的问题**：修复配置无法导入的问题
+- **优化代码** ：减少不必要的性能开销
+- **系统主题自动切换**：修复系统主题发生变化时，systemDark 和 effectiveTheme 无法自动更新
+- **优化书籍导入流程**：在导入书籍的循环中，每次调用 bookStore.addBook(book) 都会触发一次同步的 save() 写入操作（保存到 dbStorage 或 localStorage）。如果用户导入的书籍数量较多，会产生大量连续的同步 I/O 写入
+- **JSON配置导入漏洞**：如果导入的备份 JSON 文件被恶意篡改，包含 __proto__ 或 constructor 等属性，可能会导致原型链污染（Prototype Pollution）漏洞
+
 
 ## [1.3.2](https://github.com/me1dlinger/hushreader/releases/tag/v1.3.2) - 2026-06-18
 

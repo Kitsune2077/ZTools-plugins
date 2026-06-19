@@ -404,6 +404,57 @@
     .show-timer .hushreader-timer {
       opacity: 0.66;
     }
+
+    .hushreader-notification {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(4px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 200ms ease;
+    }
+
+    .hushreader-notification.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .hushreader-notification-box {
+      max-width: 80%;
+      padding: 10px 18px;
+      border-radius: 8px;
+      background: rgba(30, 31, 34, 0.92);
+      color: var(--hushreader-text-color);
+      font-size: 12px;
+      line-height: 1.5;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    }
+
+    .hushreader-notification-box .notif-action {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 3px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 4px;
+      background: transparent;
+      color: var(--hushreader-text-color);
+      font-size: 11px;
+      cursor: pointer;
+      transition: background 120ms ease;
+    }
+
+    .hushreader-notification-box .notif-action:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
   </style>
 </head>
 
@@ -423,6 +474,12 @@
       <div id="hushreaderSizeHint" class="hushreader-size-hint"></div>
     </section>
     <div id="hushreaderContextMenu" class="hushreader-context-menu" style="display:none"></div>
+    <div id="hushreaderNotification" class="hushreader-notification">
+      <div class="hushreader-notification-box">
+        <div id="notifMessage"></div>
+        <button id="notifAction" class="notif-action" style="display:none">确定</button>
+      </div>
+    </div>
   </main>
 
   <script>
@@ -451,6 +508,7 @@
     let isAutoPaging = false
     let timerRemaining = null
     let timerTickInterval = 0
+    let notifAutoCloseTimer = 0
 
     function formatTimer(ms) {
       if (ms == null || ms <= 0) return ''
@@ -486,6 +544,30 @@
         window.ztools.sendToParent("hushreader-command", command)
       }
     }
+
+    const notifNode = document.getElementById("hushreaderNotification")
+    const notifMessageNode = document.getElementById("notifMessage")
+    const notifActionNode = document.getElementById("notifAction")
+
+    window.hushreaderShowNotification = function hushreaderShowNotification(message) {
+      clearTimeout(notifAutoCloseTimer)
+      notifMessageNode.textContent = message
+      notifActionNode.style.display = "inline-block"
+      notifNode.classList.add("visible")
+    }
+
+    function closeNotification() {
+      clearTimeout(notifAutoCloseTimer)
+      notifNode.classList.remove("visible")
+      notifMessageNode.textContent = ""
+      notifActionNode.style.display = "none"
+      sendCommand("notification-close")
+    }
+
+    notifActionNode.addEventListener("click", (e) => {
+      e.stopPropagation()
+      closeNotification()
+    })
 
     function setAutoHidden(flag) {
       const mode = latestSettings.hideOnMouseLeave
@@ -774,8 +856,11 @@
 
       const newTimerRemaining = settings.timerEnabled ? settings.timerRemaining : null
       if (newTimerRemaining !== timerRemaining) {
+        const needsReset = timerRemaining == null || newTimerRemaining == null || Math.abs(newTimerRemaining - timerRemaining) > 2000
         timerRemaining = newTimerRemaining
-        startTimerTick()
+        if (needsReset) {
+          startTimerTick()
+        }
       }
 
       root.className = [

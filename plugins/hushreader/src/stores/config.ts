@@ -273,6 +273,7 @@ export const useConfigStore = defineStore('config', () => {
 
 function deepMerge(target: any, source: any): any {
   for (const key of Object.keys(source)) {
+    if (key === '__proto__' || key === 'constructor') continue
     if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
       if (!target[key]) target[key] = {}
       deepMerge(target[key], source[key])
