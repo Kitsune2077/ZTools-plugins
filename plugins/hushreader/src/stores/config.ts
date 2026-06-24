@@ -12,6 +12,8 @@ export interface HushreaderConfig {
   wheelTurnPage: boolean
   prevPageKey: string
   nextPageKey: string
+  addBookmarkKey: string
+  destroyKey: string
   opacity: number
   bgOpacity: number
   bgColor: string
@@ -83,6 +85,8 @@ const DEFAULT_CONFIG: ReaderConfig = {
     wheelTurnPage: true,
     prevPageKey: 'ArrowLeft',
     nextPageKey: 'ArrowRight',
+    addBookmarkKey: 'Shift+F',
+    destroyKey: 'Shift+D',
     opacity: 82,
     bgOpacity: 100,
     bgColor: '#1e1f22',

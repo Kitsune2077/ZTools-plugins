@@ -2,6 +2,15 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { removeBookData, loadAllCovers } from '../utils/db'
 
+export interface Bookmark {
+  id: string
+  chapterIndex: number
+  charIndex: number
+  readingPercent: number
+  text: string
+  createdAt: number
+}
+
 export interface Book {
   id: string
   title: string
@@ -26,6 +35,8 @@ export interface Book {
   readingSpeed?: number
   lastSaveReadChars?: number
   fileModifiedAt?: number | null
+  finishedAt?: number
+  bookmarks?: Bookmark[]
 }
 
 function storageGet(key: string): string | null {

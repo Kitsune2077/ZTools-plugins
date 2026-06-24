@@ -52,10 +52,14 @@ export const useReaderStore = defineStore('reader', () => {
     if (chapters.value.length === 0) return 0
     const totalChars = chapters.value.reduce((sum, ch) => sum + ch.content.length, 0)
     if (totalChars === 0) return 0
+    const isLastChapter = currentChapterIndex.value === chapters.value.length - 1
+    const isLastPage = isLastChapter && currentPage.value === totalPages.value - 1
+    const effectiveIndex = isLastPage ? currentPageSlice.value.endIndex : progressIndex.value
     const readChars = chapters.value
       .slice(0, currentChapterIndex.value)
       .reduce((sum, ch) => sum + ch.content.length, 0)
-      + progressIndex.value
+      + effectiveIndex
+    if (readChars >= totalChars) return 100
     return Math.min(100, Math.floor((readChars / totalChars) * 10000) / 100)
   })
 

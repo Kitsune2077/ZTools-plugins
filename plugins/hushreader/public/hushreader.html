@@ -1015,6 +1015,8 @@
       const binding = getKeyboardEventBinding(event)
       const prevPageKey = normalizeKeyBinding(latestSettings.prevPageKey, "ArrowLeft")
       const nextPageKey = normalizeKeyBinding(latestSettings.nextPageKey, "ArrowRight")
+      const addBookmarkKey = normalizeKeyBinding(latestSettings.addBookmarkKey, "Shift+F")
+      const destroyKey = normalizeKeyBinding(latestSettings.destroyKey, "Shift+D")
 
       if (binding && binding === nextPageKey) {
         event.preventDefault()
@@ -1022,6 +1024,12 @@
       } else if (binding && binding === prevPageKey) {
         event.preventDefault()
         sendCommand("prev")
+      } else if (binding && binding === addBookmarkKey) {
+        event.preventDefault()
+        sendCommand("add-bookmark")
+      } else if (binding && binding === destroyKey) {
+        event.preventDefault()
+        sendCommand("destroy")
       }
     })
 
@@ -1161,22 +1169,25 @@
 
     document.addEventListener("contextmenu", (event) => {
       event.preventDefault()
-      if (!latestSettings.showHushreaderMeta) return
-
-      const metaRect = metaNode.getBoundingClientRect()
-      const inMetaArea = event.clientX >= metaRect.left - 4 && event.clientX <= metaRect.right + 4
-        && event.clientY >= metaRect.top - 4 && event.clientY <= metaRect.bottom + 4
-
-      if (!inMetaArea) return
 
       const items = []
-      items.push({ label: "关闭隐阅窗口", command: "close-reader" })
-      items.push({ label: "显示主窗口", command: "show-main" })
-      if (isAutoPaging) {
-        items.push({ label: "停止自动翻页", command: "stop-auto" })
-      } else {
-        items.push({ label: "开启自动翻页", command: "start-auto" })
+      if (latestSettings.showHushreaderMeta) {
+        const metaRect = metaNode.getBoundingClientRect()
+        const inMetaArea = event.clientX >= metaRect.left - 4 && event.clientX <= metaRect.right + 4
+          && event.clientY >= metaRect.top - 4 && event.clientY <= metaRect.bottom + 4
+        if (inMetaArea) {
+          items.push({ label: "关闭隐阅窗口", command: "close-reader" })
+          items.push({ label: "添加书签", command: "add-bookmark" })
+          items.push({ label: "显示主窗口", command: "show-main" })
+          if (isAutoPaging) {
+            items.push({ label: "停止自动翻页", command: "stop-auto" })
+          } else {
+            items.push({ label: "开启自动翻页", command: "start-auto" })
+          }
+        }
       }
+
+      if (items.length === 0) return
 
       contextMenuNode.innerHTML = ""
       items.forEach((item) => {

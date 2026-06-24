@@ -35,7 +35,7 @@ function formatDate(ts: number) {
 
 function progressText(book: Book): string {
   if (!book.lastReadAt) return ''
-    if (book.readingPercent != null) {
+  if (book.readingPercent != null) {
     return `${book.readingPercent}%`
   }
   if (book.totalChapters && book.lastChapter != null) {
@@ -47,36 +47,29 @@ function progressText(book: Book): string {
 </script>
 
 <template>
-  <div
-    class="book-card"
-    :class="{ 'list-mode': listMode, 'selection-mode': selectionMode, selected }"
+  <div class="book-card" :class="{ 'list-mode': listMode, 'selection-mode': selectionMode, selected }"
     @click="selectionMode ? emit('toggle-select') : emit('click')"
-    @contextmenu.prevent="!selectionMode && emit('contextmenu', $event)"
-  >
+    @contextmenu.prevent="!selectionMode && emit('contextmenu', $event)">
     <!-- Selection checkbox -->
     <div v-if="selectionMode" class="select-check" :class="{ checked: selected }">
-      <svg v-if="selected" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+      <svg v-if="selected" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+        stroke-width="3">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
     </div>
     <!-- Cover -->
-    <div
-      class="book-cover"
-      :style="displayCover ? {} : { background: book.coverColor || '#4a7fa5' }"
-    >
-      <img
-        v-if="displayCover"
-        :src="displayCover"
-        :alt="book.title"
-        class="cover-img"
-        @error="onImgError"
-      />
+    <div class="book-cover" :style="displayCover ? {} : { background: book.coverColor || '#4a7fa5' }">
+      <img v-if="displayCover" :src="displayCover" :alt="book.title" class="cover-img" @error="onImgError" />
       <template v-else>
         <span class="cover-format">{{ book.format.toUpperCase() }}</span>
         <span class="cover-title">{{ book.title }}</span>
       </template>
+      <span class="format-badge" :class="book.format">{{ book.format.toUpperCase() }}</span>
       <span v-if="progressText(book)" class="cover-progress">
         <span class="progress-bar" :style="{ width: progressText(book) }"></span>
         <span class="progress-label">{{ progressText(book) }}</span>
       </span>
+      <span v-if="book.finishedAt && !selectionMode && !listMode" class="finished-badge">已读完</span>
     </div>
 
     <!-- Info -->
@@ -84,7 +77,9 @@ function progressText(book: Book): string {
       <p class="book-title">{{ book.title }}</p>
       <p class="book-author">{{ book.author || '未知作者' }}</p>
       <p v-if="listMode" class="book-meta">
-        {{ (book.categories || []).join('、') }}{{ book.categories?.length && book.lastReadAt ? ' · ' : '' }}{{ book.lastReadAt ? formatDate(book.lastReadAt) : '' }}
+        <span v-if="book.finishedAt" class="meta-finished">已读完</span>{{ (book.categories || []).join('、') }}{{
+          book.categories?.length && book.lastReadAt ? ' · ' : '' }}{{ book.lastReadAt ? formatDate(book.lastReadAt) : ''
+        }}
       </p>
     </div>
   </div>
@@ -100,6 +95,7 @@ function progressText(book: Book): string {
   padding: 6px;
   transition: background 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
 }
+
 .book-card:hover {
   background: var(--c-surface-sunken);
 }
@@ -245,7 +241,9 @@ function progressText(book: Book): string {
   line-height: 1.4;
 }
 
-.list-mode .book-title { font-size: 13px; }
+.list-mode .book-title {
+  font-size: 13px;
+}
 
 .book-author {
   margin-top: 2px;
@@ -260,5 +258,69 @@ function progressText(book: Book): string {
   margin-top: 2px;
   font-size: 11px;
   color: var(--c-ink-tertiary);
+}
+
+.meta-finished {
+  display: inline-block;
+  padding: 0 4px;
+  margin-right: 4px;
+  border-radius: var(--radius-xs);
+  background: var(--c-accent);
+  color: var(--c-ink-inverse);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.6;
+  vertical-align: middle;
+}
+
+.finished-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--c-accent);
+  color: var(--c-ink-inverse);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.format-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 1px 5px;
+  border-radius: var(--radius-xs);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  z-index: 2;
+  pointer-events: none;
+  line-height: 1.5;
+}
+
+.format-badge.epub {
+  background: rgba(59, 130, 246, 0.85);
+  color: #fff;
+}
+
+.format-badge.txt {
+  background: rgba(107, 114, 128, 0.85);
+  color: #fff;
+}
+
+.format-badge.mobi {
+  background: rgba(234, 88, 12, 0.85);
+  color: #fff;
+}
+
+.list-mode .format-badge {
+  top: 3px;
+  left: 3px;
+  padding: 0 3px;
+  font-size: 7px;
 }
 </style>

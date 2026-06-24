@@ -2,3 +2,5 @@ node_modules
 dist
 **/*.zip
 test
+功能说明文档.md
+docs/

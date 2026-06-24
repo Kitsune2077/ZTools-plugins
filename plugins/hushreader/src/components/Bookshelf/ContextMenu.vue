@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, nextTick, watch } from 'vue'
 
-const props = defineProps<{ pos: { x: number; y: number } }>()
+const props = defineProps<{ pos: { x: number; y: number }; isFinished?: boolean }>()
 const emit = defineEmits<{
   'book-info': []
   'chapter-list': []
+  'bookmark-list': []
+  'search-jump': []
   'change-path': []
   'open-file-location': []
   'edit-metadata': []
@@ -12,6 +14,7 @@ const emit = defineEmits<{
   'set-category': []
   'set-cover': []
   'restore-cover': []
+  'mark-unfinished': []
   'delete': []
   'close': []
 }>()
@@ -51,6 +54,14 @@ watch(
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
         章节列表
       </li>
+      <li class="ctx-item" @click="emit('bookmark-list')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        书签列表
+      </li>
+      <li class="ctx-item" @click="emit('search-jump')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        搜索跳转
+      </li>
       <li class="ctx-item" @click="emit('change-path')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         修改本地路径
@@ -81,6 +92,11 @@ watch(
         恢复封面
       </li>
       <li class="ctx-divider"></li>
+      <li v-if="isFinished" class="ctx-item" @click="emit('mark-unfinished')">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+        标记为未读完
+      </li>
+      <li v-if="isFinished" class="ctx-divider"></li>
       <li class="ctx-item ctx-danger" @click="emit('delete')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
         删除书籍

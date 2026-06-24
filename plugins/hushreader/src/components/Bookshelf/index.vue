@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, inject, onMounted, onBeforeUnmount, watch } from 'vue'
-import { useBookStore } from '../../stores/books'
+import { useBookStore, type Bookmark } from '../../stores/books'
 import { useConfigStore } from '../../stores/config'
 import { useReaderStore } from '../../stores/reader'
 import { parseTxt } from '../../utils/txtParser'
@@ -127,9 +127,52 @@ function jumpToChapter(chapterIndex: number) {
   showChapterList.value = false
   const bookId = chapterListBookId.value
   if (!bookId) return
-  // Set lastChapter so it opens at that chapter
   bookStore.updateBook(bookId, { lastChapter: chapterIndex, lastPage: 0 })
   openBookAndHushreader?.(bookId)
+}
+
+// Bookmark list modal
+const showBookmarkList = ref(false)
+const bookmarkListBookId = ref<string | null>(null)
+
+function openBookmarkList(bookId: string) {
+  closeContextMenu()
+  bookmarkListBookId.value = bookId
+  showBookmarkList.value = true
+}
+
+function getBookmarkList(): Bookmark[] {
+  if (!bookmarkListBookId.value) return []
+  const book = bookStore.books.find(b => b.id === bookmarkListBookId.value)
+  return book?.bookmarks ?? []
+}
+
+function formatBookmarkDate(ts: number): string {
+  const d = new Date(ts)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function formatBookmarkText(text: string): string {
+  if (text.length <= 50) return text
+  return text.slice(0, 50) + '...'
+}
+
+function jumpToBookmark(bookmark: Bookmark) {
+  const bookId = bookmarkListBookId.value
+  if (!bookId) return
+  showBookmarkList.value = false
+  bookStore.updateBook(bookId, { lastChapter: bookmark.chapterIndex, progressIndex: bookmark.charIndex })
+  openBookAndHushreader?.(bookId)
+}
+
+function deleteBookmark(bookmarkId: string) {
+  if (!bookmarkListBookId.value) return
+  const book = bookStore.books.find(b => b.id === bookmarkListBookId.value)
+  if (!book?.bookmarks) return
+  bookStore.updateBook(bookmarkListBookId.value, {
+    bookmarks: book.bookmarks.filter(bm => bm.id !== bookmarkId)
+  })
 }
 
 // Change file path
@@ -370,6 +413,12 @@ function openDeleteModal(bookId: string) {
   showDeleteModal.value = true
 }
 
+function markUnfinished(bookId: string) {
+  closeContextMenu()
+  bookStore.updateBook(bookId, { finishedAt: undefined })
+  toast('已标记为未读完', 'success')
+}
+
 function confirmDelete() {
   if (!deleteBookId.value) return
   bookStore.removeBook(deleteBookId.value)
@@ -452,6 +501,246 @@ async function reloadMetadata(bookId: string, silent = false) {
 function openReloadMetadata(bookId: string) {
   closeContextMenu()
   reloadMetadata(bookId)
+}
+
+// Full-text search modal
+const showSearchModal = ref(false)
+const searchBookId = ref<string | null>(null)
+const searchKeyword = ref('')
+const searchResults = ref<{ charOffset: number; sentence: string; percent: number }[]>([])
+const searchLoading = ref(false)
+const searchPage = ref(1)
+
+function openSearchModal(bookId: string) {
+  closeContextMenu()
+  searchBookId.value = bookId
+  searchKeyword.value = ''
+  searchResults.value = []
+  searchPage.value = 1
+  showSearchModal.value = true
+}
+
+const SEARCH_PAGE_SIZE = 10
+
+const searchPagedResults = computed(() => {
+  const start = (searchPage.value - 1) * SEARCH_PAGE_SIZE
+  return searchResults.value.slice(start, start + SEARCH_PAGE_SIZE)
+})
+
+const searchTotalPages = computed(() => Math.max(1, Math.ceil(searchResults.value.length / SEARCH_PAGE_SIZE)))
+
+function highlightKeyword(text: string, keyword: string): string {
+  if (!keyword) return text
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return text.replace(new RegExp(escaped, 'gi'), '<mark>$&</mark>')
+}
+
+function formatSearchResult(sentence: string, keyword: string): string {
+  const maxLen = 20
+  const idx = sentence.toLowerCase().indexOf(keyword.toLowerCase())
+  if (idx === -1) return sentence.length <= maxLen ? sentence : sentence.slice(0, maxLen) + '...'
+  const minEnd = idx + keyword.length + 5
+  const end = Math.max(minEnd, maxLen)
+  if (sentence.length <= end) return sentence
+  return sentence.slice(0, end) + '...'
+}
+
+async function executeSearch() {
+  const bookId = searchBookId.value
+  const keyword = searchKeyword.value.trim()
+  if (!bookId || !keyword) return
+
+  const book = bookStore.books.find(b => b.id === bookId)
+  if (!book) return
+
+  searchLoading.value = true
+  searchResults.value = []
+  searchPage.value = 1
+
+  try {
+    let fullText = ''
+
+    if (book.format === 'txt') {
+      fullText = window.services?.readFile(book.filePath) ?? ''
+    } else if (book.format === 'mobi') {
+      const content = window.services?.readFileBinary?.(book.filePath)
+      if (content) {
+        const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+        const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
+        const result = await parseMobi(file)
+        if (result.error) { toast(`搜索失败：${result.error}`, 'error'); searchLoading.value = false; return }
+        fullText = result.chapters.map(c => c.content || '').join('\n')
+      }
+    } else {
+      const content = window.services?.readFileBinary?.(book.filePath)
+      if (content) {
+        const blob = new Blob([content], { type: 'application/epub+zip' })
+        const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.epub')
+        const { chapters: parsed } = await parseEpub(file)
+        fullText = parsed.map(c => c.content || '').join('\n')
+      }
+    }
+
+    if (!fullText) {
+      toast('无法加载书籍内容', 'error')
+      searchLoading.value = false
+      return
+    }
+
+    const totalLen = fullText.length
+    const boundaryRe = /[。！？…!?\.\」\』\）\】\」]/g
+    const sentenceEndRe = /[。！？…!?\.]/
+    const kwLower = keyword.toLowerCase()
+    const results: typeof searchResults.value = []
+    let pos = 0
+
+    while (pos < fullText.length) {
+      const kwIdx = fullText.toLowerCase().indexOf(kwLower, pos)
+      if (kwIdx === -1) break
+
+      let start = 0
+      const beforeKw = fullText.slice(0, kwIdx)
+      let lastBoundary = -1
+      let m: RegExpExecArray | null
+      boundaryRe.lastIndex = 0
+      while ((m = boundaryRe.exec(beforeKw)) !== null) {
+        lastBoundary = m.index + m[0].length
+      }
+      if (lastBoundary >= 0) {
+        start = lastBoundary
+        while (start < fullText.length && /[\s\u3000]/.test(fullText[start])) start++
+      }
+      if (start > kwIdx) start = 0
+
+      const rest = fullText.slice(start)
+      const endMatch = sentenceEndRe.exec(rest)
+      let sentence: string
+      let sentenceEnd: number
+      if (endMatch) {
+        sentenceEnd = start + endMatch.index + endMatch[0].length
+        sentence = fullText.slice(start, sentenceEnd).trim()
+      } else {
+        sentence = rest.trim().slice(0, 50)
+        sentenceEnd = start + rest.trim().slice(0, 50).length
+      }
+
+      const alreadyFound = results.some(r => r.charOffset >= start && r.charOffset < sentenceEnd)
+      if (!alreadyFound) {
+        const percent = totalLen > 0 ? (start / totalLen) * 100 : 0
+        results.push({
+          charOffset: start,
+          sentence,
+          percent
+        })
+      }
+
+      pos = sentenceEnd > start ? sentenceEnd : kwIdx + 1
+    }
+
+    searchResults.value = results
+  } catch (e: any) {
+    toast(`搜索失败：${e.message}`, 'error')
+  } finally {
+    searchLoading.value = false
+  }
+}
+
+function jumpToSearchResult(result: { charOffset: number }) {
+  const bookId = searchBookId.value
+  if (!bookId) return
+  const book = bookStore.books.find(b => b.id === bookId)
+  if (!book) return
+
+  showSearchModal.value = false
+
+  let chapters: { index: number; content: string }[] = []
+  if (book.format === 'txt') {
+    const text = window.services?.readFile(book.filePath) ?? ''
+    const parsed = parseTxt(text, configStore.config.other.chapterRegex || undefined)
+    chapters = parsed.map(c => ({ index: c.index, content: c.content || '' }))
+  } else if (book.format === 'mobi') {
+    const content = window.services?.readFileBinary?.(book.filePath)
+    if (content) {
+      const blob = new Blob([content], { type: 'application/x-mobipocket-ebook' })
+      const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.mobi')
+      parseMobi(file).then(r => {
+        if (!r.error) {
+          const chs = r.chapters.map(c => ({ index: c.index, content: c.content || '' }))
+          jumpToOffset(bookId, chs, result.charOffset)
+        }
+      })
+      return
+    }
+  } else {
+    const content = window.services?.readFileBinary?.(book.filePath)
+    if (content) {
+      const blob = new Blob([content], { type: 'application/epub+zip' })
+      const file = new File([blob], book.filePath.split(/[\\/]/).pop() ?? 'book.epub')
+      parseEpub(file).then(({ chapters: parsed }) => {
+        const chs = parsed.map(c => ({ index: c.index, content: c.content || '' }))
+        jumpToOffset(bookId, chs, result.charOffset)
+      })
+      return
+    }
+  }
+
+  jumpToOffset(bookId, chapters, result.charOffset)
+}
+
+function jumpToOffset(bookId: string, chapters: { index: number; content: string }[], offset: number) {
+  let cumLen = 0
+  for (const ch of chapters) {
+    const chLen = ch.content.length + 1
+    if (cumLen + ch.content.length > offset) {
+      const charIndex = offset - cumLen
+      bookStore.updateBook(bookId, { lastChapter: ch.index, progressIndex: charIndex })
+      openBookAndHushreader?.(bookId)
+      return
+    }
+    cumLen += chLen
+  }
+  const last = chapters[chapters.length - 1]
+  if (last) {
+    bookStore.updateBook(bookId, { lastChapter: last.index, progressIndex: 0 })
+    openBookAndHushreader?.(bookId)
+  }
+}
+
+// Batch category modal
+const showBatchCategoryModal = ref(false)
+const batchCategorySelected = ref<string[]>([])
+const batchCategoryNew = ref('')
+
+function openBatchCategory() {
+  if (selectedIds.value.size === 0) return
+  batchCategorySelected.value = []
+  batchCategoryNew.value = ''
+  showBatchCategoryModal.value = true
+}
+
+function toggleBatchCategorySelection(cat: string) {
+  const idx = batchCategorySelected.value.indexOf(cat)
+  if (idx > -1) {
+    batchCategorySelected.value.splice(idx, 1)
+  } else {
+    batchCategorySelected.value.push(cat)
+  }
+}
+
+function confirmBatchCategory() {
+  const newCats = batchCategoryNew.value
+    .split(/[,，]/)
+    .map(s => s.trim())
+    .filter(Boolean)
+  const finalCats = [...new Set([...batchCategorySelected.value, ...newCats])]
+
+  for (const id of selectedIds.value) {
+    bookStore.updateBook(id, { categories: finalCats.length > 0 ? finalCats : undefined })
+  }
+
+  showBatchCategoryModal.value = false
+  toast(`已为 ${selectedIds.value.size} 本书设置分类`, 'success')
+  exitSelectionMode()
 }
 
 // Multi-select mode
@@ -851,6 +1140,18 @@ watch(() => configStore.config.other.plainTextCover, async (plain) => {
 
 
 const cfg = computed(() => configStore.config)
+
+const statsTotal = computed(() => bookStore.books.length)
+const statsRead = computed(() => bookStore.books.filter(b => b.lastReadAt).length)
+const statsReadingTimeMs = computed(() => bookStore.books.reduce((sum, b) => sum + (b.readingTimeMs || 0), 0))
+
+function formatReadingTime(ms: number): string {
+  const totalMin = Math.floor(ms / 60000)
+  if (totalMin < 60) return `${totalMin}分钟`
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  return m > 0 ? `${h}小时${m}分` : `${h}小时`
+}
 </script>
 
 <template>
@@ -875,16 +1176,31 @@ const cfg = computed(() => configStore.config)
         <input v-model="bookStore.searchQuery" class="search-input" placeholder="搜索书名或作者..." />
       </div>
       <div class="shelf-actions">
+        <button class="icon-btn" :class="{ active: cfg.other.listMode }" :title="cfg.other.listMode ? '卡片视图' : '列表视图'"
+          @click="configStore.config.other.listMode = !configStore.config.other.listMode">
+          <svg v-if="cfg.other.listMode" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+          </svg>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="6" x2="21" y2="6" />
+            <line x1="8" y1="12" x2="21" y2="12" />
+            <line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="5" y2="6" />
+            <line x1="3" y1="12" x2="5" y2="12" />
+            <line x1="3" y1="18" x2="5" y2="18" />
+          </svg>
+        </button>
         <button class="icon-btn" :class="{ active: selectionMode }" :title="selectionMode ? '退出多选' : '多选'"
           @click="toggleSelectionMode">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline v-if="selectionMode" points="18 6 6 18" />
             <polyline v-if="selectionMode" points="6 6 18 18" />
             <template v-else>
-              <rect x="3" y="3" width="7" height="7" rx="1" />
-              <rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" />
-              <rect x="14" y="14" width="7" height="7" rx="1" />
+              <polyline points="9 11 12 14 22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
             </template>
           </svg>
         </button>
@@ -904,6 +1220,15 @@ const cfg = computed(() => configStore.config)
         </button>
       </div>
     </header>
+
+    <!-- Stats bar -->
+    <div class="stats-bar">
+      <span class="stats-item"><span class="stats-value">{{ statsTotal }}</span>本书</span>
+      <span class="stats-divider"></span>
+      <span class="stats-item"><span class="stats-value">{{ statsRead }}</span>本已读</span>
+      <span class="stats-divider"></span>
+      <span class="stats-item">累计阅读<span class="stats-value">{{ formatReadingTime(statsReadingTimeMs) }}</span></span>
+    </div>
 
     <!-- Category tabs -->
     <div class="category-bar">
@@ -956,11 +1281,14 @@ const cfg = computed(() => configStore.config)
     </div>
 
     <!-- Context Menu -->
-    <ContextMenu v-if="contextMenuBook" :pos="contextMenuPos" @book-info="openBookInfo(contextMenuBook!)"
-      @chapter-list="openChapterList(contextMenuBook!)" @change-path="openPathModal(contextMenuBook!)"
-      @open-file-location="openFileLocation(contextMenuBook!)" @edit-metadata="openMetadataModal(contextMenuBook!)"
-      @reload-metadata="openReloadMetadata(contextMenuBook!)" @set-category="openCategoryModal(contextMenuBook!)"
-      @set-cover="openCoverPicker(contextMenuBook!)" @restore-cover="openRestoreCover(contextMenuBook!)"
+    <ContextMenu v-if="contextMenuBook" :pos="contextMenuPos"
+      :is-finished="!!bookStore.books.find(b => b.id === contextMenuBook)?.finishedAt"
+      @book-info="openBookInfo(contextMenuBook!)" @chapter-list="openChapterList(contextMenuBook!)"
+      @bookmark-list="openBookmarkList(contextMenuBook!)" @search-jump="openSearchModal(contextMenuBook!)"
+      @change-path="openPathModal(contextMenuBook!)" @open-file-location="openFileLocation(contextMenuBook!)"
+      @edit-metadata="openMetadataModal(contextMenuBook!)" @reload-metadata="openReloadMetadata(contextMenuBook!)"
+      @set-category="openCategoryModal(contextMenuBook!)" @set-cover="openCoverPicker(contextMenuBook!)"
+      @restore-cover="openRestoreCover(contextMenuBook!)" @mark-unfinished="markUnfinished(contextMenuBook!)"
       @delete="openDeleteModal(contextMenuBook!)" @close="closeContextMenu" />
 
     <!-- Settings Modal -->
@@ -980,6 +1308,66 @@ const cfg = computed(() => configStore.config)
             <span class="ch-title">{{ ch.title }}</span>
           </button>
         </div>
+      </div>
+    </Modal>
+
+    <!-- Bookmark List Modal -->
+    <Modal v-if="showBookmarkList" title="书签列表" @close="showBookmarkList = false">
+      <div class="bookmark-list">
+        <div v-if="getBookmarkList().length === 0" class="bookmark-empty">暂无书签</div>
+        <div v-else class="bookmark-items">
+          <div v-for="bm in getBookmarkList()" :key="bm.id" class="bookmark-item" @dblclick="jumpToBookmark(bm)">
+            <div class="bookmark-info">
+              <span class="bookmark-date">{{ formatBookmarkDate(bm.createdAt) }}</span>
+              <span class="bookmark-percent">{{ bm.readingPercent.toFixed(1) }}%</span>
+            </div>
+            <div class="bookmark-text">{{ formatBookmarkText(bm.text) }}</div>
+            <button class="bookmark-delete" @click.stop="deleteBookmark(bm.id)" title="删除书签">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <p class="bookmark-hint">双击书签跳转到对应位置</p>
+      </div>
+    </Modal>
+
+    <!-- Search Jump Modal -->
+    <Modal v-if="showSearchModal" title="搜索跳转" @close="showSearchModal = false">
+      <div class="search-modal">
+        <div class="search-bar">
+          <input v-model="searchKeyword" class="form-input search-input-modal" placeholder="输入搜索关键词..."
+            @keydown.enter="executeSearch" />
+          <button class="btn-primary" :disabled="!searchKeyword.trim() || searchLoading" @click="executeSearch">
+            <span v-if="searchLoading" class="spinner"
+              style="width:14px;height:14px;border-width:1.5px;margin-right:4px"></span>
+            搜索
+          </button>
+        </div>
+        <div v-if="searchResults.length > 0" class="search-meta">
+          共 {{ searchResults.length }} 条结果，第 {{ searchPage }}/{{ searchTotalPages }} 页
+        </div>
+        <div v-if="searchResults.length > 0" class="search-results">
+          <div v-for="(r, i) in searchPagedResults" :key="i" class="search-result-item"
+            @dblclick="jumpToSearchResult(r)">
+            <div class="search-result-info">
+              <span class="search-result-percent">{{ r.percent.toFixed(1) }}%</span>
+            </div>
+            <div class="search-result-text"
+              v-html="highlightKeyword(formatSearchResult(r.sentence, searchKeyword), searchKeyword)"></div>
+          </div>
+        </div>
+        <div v-if="searchResults.length === 0 && !searchLoading && searchKeyword.trim()" class="search-empty">
+          暂无结果
+        </div>
+        <div v-if="searchResults.length > SEARCH_PAGE_SIZE" class="search-pagination">
+          <button class="btn-secondary" :disabled="searchPage <= 1" @click="searchPage--">上一页</button>
+          <span class="search-page-info">{{ searchPage }} / {{ searchTotalPages }}</span>
+          <button class="btn-secondary" :disabled="searchPage >= searchTotalPages" @click="searchPage++">下一页</button>
+        </div>
+        <p class="bookmark-hint">双击结果跳转到对应位置</p>
       </div>
     </Modal>
 
@@ -1070,6 +1458,7 @@ const cfg = computed(() => configStore.config)
             style="width:14px;height:14px;border-width:1.5px;margin-right:4px"></span>
           批量重载
         </button>
+        <button class="btn-secondary" :disabled="selectedCount === 0" @click="openBatchCategory">批量设置分类</button>
         <button class="btn-danger" :disabled="selectedCount === 0" @click="openBatchDelete">批量删除</button>
         <button class="btn-ghost" @click="exitSelectionMode">取消</button>
       </div>
@@ -1082,6 +1471,28 @@ const cfg = computed(() => configStore.config)
         <div class="form-actions">
           <button class="btn-secondary" @click="showBatchDeleteModal = false">取消</button>
           <button class="btn-danger" @click="confirmBatchDelete">删除</button>
+        </div>
+      </div>
+    </Modal>
+
+    <!-- Batch Category Modal -->
+    <Modal v-if="showBatchCategoryModal" title="批量设置分类" @close="showBatchCategoryModal = false">
+      <div class="form-modal">
+        <p class="form-hint" style="margin: 0 0 8px">将为选中的 {{ selectedCount }} 本书统一设置以下分类（覆盖原有分类）</p>
+        <label class="form-label">已有分类（多选）</label>
+        <div v-if="bookStore.categories.length > 1" class="category-tags">
+          <button v-for="cat in bookStore.categories.filter(c => c !== '全部')" :key="cat" class="category-tag"
+            :class="{ active: batchCategorySelected.includes(cat) }" @click="toggleBatchCategorySelection(cat)">
+            {{ cat }}
+          </button>
+        </div>
+        <p v-else class="form-hint">暂无其他分类</p>
+        <label class="form-label" style="margin-top: 12px">新建分类</label>
+        <input v-model="batchCategoryNew" class="form-input" placeholder="输入新分类名称，多个用逗号分隔..." />
+        <p class="form-hint">留空则不添加新分类</p>
+        <div class="form-actions">
+          <button class="btn-secondary" @click="showBatchCategoryModal = false">取消</button>
+          <button class="btn-primary" @click="confirmBatchCategory">确认</button>
         </div>
       </div>
     </Modal>
@@ -1182,6 +1593,35 @@ const cfg = computed(() => configStore.config)
   display: flex;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 20px 8px;
+  font-size: 12px;
+  color: var(--c-ink-tertiary);
+  flex-shrink: 0;
+}
+
+.stats-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.stats-value {
+  color: var(--c-ink-secondary);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+.stats-divider {
+  width: 1px;
+  height: 12px;
+  background: var(--c-border);
 }
 
 .icon-btn {
@@ -1639,5 +2079,196 @@ const cfg = computed(() => configStore.config)
   bottom: 20px;
   right: 20px;
   z-index: 100;
+}
+
+.bookmark-list {
+  min-width: 280px;
+}
+
+.bookmark-empty {
+  text-align: center;
+  color: var(--c-ink-tertiary);
+  padding: 24px 0;
+  font-size: 13px;
+}
+
+.bookmark-items {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.bookmark-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 32px 10px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s var(--ease-out);
+}
+
+.bookmark-item:hover {
+  background: var(--c-surface-sunken);
+}
+
+.bookmark-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bookmark-date {
+  font-size: 12px;
+  color: var(--c-ink-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.bookmark-percent {
+  font-size: 11px;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
+.bookmark-text {
+  font-size: 13px;
+  color: var(--c-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookmark-delete {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--c-ink-tertiary);
+  opacity: 0;
+  transition: all 0.12s var(--ease-out);
+}
+
+.bookmark-item:hover .bookmark-delete {
+  opacity: 1;
+}
+
+.bookmark-delete:hover {
+  background: var(--c-danger-soft);
+  color: var(--c-danger);
+}
+
+.bookmark-hint {
+  margin: 12px 0 0;
+  font-size: 11px;
+  color: var(--c-ink-tertiary);
+  text-align: center;
+}
+
+.search-modal {
+  min-width: 320px;
+}
+
+.search-bar {
+  display: flex;
+  gap: 8px;
+}
+
+.search-input-modal {
+  flex: 1;
+}
+
+.search-meta {
+  font-size: 12px;
+  color: var(--c-ink-tertiary);
+  margin-top: 8px;
+}
+
+.search-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.search-result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.12s var(--ease-out);
+}
+
+.search-result-item:hover {
+  background: var(--c-surface-sunken);
+}
+
+.search-result-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-result-chapter {
+  font-size: 12px;
+  color: var(--c-ink-tertiary);
+}
+
+.search-result-percent {
+  font-size: 11px;
+  color: var(--c-accent);
+  background: var(--c-accent-soft);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
+.search-result-text {
+  font-size: 13px;
+  color: var(--c-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result-text :deep(mark) {
+  background: var(--c-accent-soft);
+  color: var(--c-accent);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.search-empty {
+  text-align: center;
+  color: var(--c-ink-tertiary);
+  padding: 24px 0;
+  font-size: 13px;
+}
+
+.search-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.search-page-info {
+  font-size: 12px;
+  color: var(--c-ink-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 </style>

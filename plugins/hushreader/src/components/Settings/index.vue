@@ -698,6 +698,24 @@ function commitCapture(targetArr: string[]) {
             </div>
           </div>
 
+          <div class="setting-row">
+            <label>添加书签快捷键</label>
+            <div class="input-group">
+              <input class="key-input" :value="cfg.hushreader.addBookmarkKey"
+                @keydown.prevent="(e: KeyboardEvent) => { const b = getKeyBinding(e); if (b) cfg.hushreader.addBookmarkKey = b }"
+                placeholder="按下按键..." readonly />
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <label>销毁隐阅窗口快捷键</label>
+            <div class="input-group">
+              <input class="key-input" :value="cfg.hushreader.destroyKey"
+                @keydown.prevent="(e: KeyboardEvent) => { const b = getKeyBinding(e); if (b) cfg.hushreader.destroyKey = b }"
+                placeholder="按下按键..." readonly />
+            </div>
+          </div>
+
           <div class="divider"></div>
           <div class="section-label">自动翻页</div>
 
@@ -770,14 +788,6 @@ function commitCapture(targetArr: string[]) {
         <div v-if="activeTab === 'other'" class="settings-grid">
 
           <div class="section-label">书架</div>
-
-          <div class="setting-row">
-            <label>列表书架模式</label>
-            <label class="toggle">
-              <input type="checkbox" v-model="cfg.other.listMode" />
-              <span class="toggle-track"></span>
-            </label>
-          </div>
 
           <div class="setting-row">
             <label>显示纯色封面</label>

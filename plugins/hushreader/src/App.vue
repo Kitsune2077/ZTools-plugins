@@ -3,7 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, provide, ref, watch } f
 import Bookshelf from './components/Bookshelf/index.vue'
 import Toast from './components/Bookshelf/Toast.vue'
 import { useReaderStore } from './stores/reader'
-import { useBookStore } from './stores/books'
+import { useBookStore, type Bookmark } from './stores/books'
 import { useConfigStore } from './stores/config'
 import { parseTxt } from './utils/txtParser'
 import { parseEpub } from './utils/epubParser'
@@ -208,6 +208,8 @@ function getHushreaderPayload(bounds = getHushreaderWindowBounds()) {
       bgOpacity: hushreaderCfg.value.bgOpacity,
       prevPageKey: hushreaderCfg.value.prevPageKey,
       nextPageKey: hushreaderCfg.value.nextPageKey,
+      addBookmarkKey: hushreaderCfg.value.addBookmarkKey,
+      destroyKey: hushreaderCfg.value.destroyKey,
       showHushreaderMeta: hushreaderCfg.value.showHushreaderMeta,
       progressMode: hushreaderCfg.value.progressMode,
       hideOnMouseLeave: hushreaderCfg.value.hideOnMouseLeave,
@@ -466,6 +468,10 @@ function saveReadingProgress() {
     updates.lastSaveReadChars = Math.round(totalChars * (readerStore.readingPercent / 100))
   }
 
+  if (readerStore.readingPercent >= 100 && !book.finishedAt) {
+    updates.finishedAt = now
+  }
+
   (window as any).__hushreaderSessionLastActive = now
   bookStore.updateBook(book.id, updates)
 }
@@ -629,9 +635,45 @@ function handleHushreaderCommand(command: HushreaderCommand) {
   else if (command === 'close') closePlugin()
   else if (command === 'auto') toggleAutoPaging()
   else if (command === 'close-reader') { isReaderHidden.value = true; blurHushreaderKeyboard() }
+  else if (command === 'destroy') { saveReadingProgress(); hushreaderActivated.value = false; stopReadingTimer(); hushreaderWindow?.close?.() }
   else if (command === 'show-main') { (window as any).ztools?.showMainWindow?.() }
   else if (command === 'stop-auto') { isAutoPaging.value = false; hushreaderCfg.value.autoFlipEnabled = false }
   else if (command === 'start-auto') { if (currentBook.value) { isAutoPaging.value = true; hushreaderCfg.value.autoFlipEnabled = true } }
+  else if (command === 'add-bookmark') {
+    const book = currentBook.value
+    if (book) {
+      const pageText = hushreaderLines.value.join('')
+      const boundaryRe = /[。！？…!?\.\」\』\）\】\」]/
+      let start = 0
+      const boundary = boundaryRe.exec(pageText)
+      if (boundary) {
+        start = boundary.index + boundary[0].length
+        while (start < pageText.length && /[\s\u3000]/.test(pageText[start])) start++
+      }
+      if (start >= pageText.length) start = 0
+      const rest = pageText.slice(start)
+      const sentenceEndRe = /[。！？…!?\.]/
+      let text = ''
+      const endMatch = sentenceEndRe.exec(rest)
+      if (endMatch) {
+        text = rest.slice(0, endMatch.index + endMatch[0].length).trim()
+      } else {
+        text = rest.trim().slice(0, 50)
+      }
+      if (text.length > 50) text = text.slice(0, 50) + '...'
+      const bookmark: Bookmark = {
+        id: `bm_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+        chapterIndex: readerStore.currentChapterIndex,
+        charIndex: readerStore.currentPageSlice.startIndex,
+        readingPercent: readerStore.readingPercent,
+        text,
+        createdAt: Date.now()
+      }
+      const existing = book.bookmarks ?? []
+      bookStore.updateBook(book.id, { bookmarks: [...existing, bookmark] })
+      toast('书签已添加', 'success')
+    }
+  }
   else if (command === 'notification-close') { pendingNotificationCallback?.(); pendingNotificationCallback = null }
 }
 
@@ -708,6 +750,8 @@ watch(
     hushreaderCfg.value.bgOpacity,
     hushreaderCfg.value.prevPageKey,
     hushreaderCfg.value.nextPageKey,
+    hushreaderCfg.value.addBookmarkKey,
+    hushreaderCfg.value.destroyKey,
     hushreaderCfg.value.showHushreaderMeta,
     hushreaderCfg.value.progressMode,
     hushreaderCfg.value.hideOnMouseLeave,
