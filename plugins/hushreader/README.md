@@ -16,25 +16,45 @@
 
 ## 功能一览
 
-| 阅读体验                | 个性化              | 书架管理              |
-| :------------------ | :--------------- | :---------------- |
-| 沉浸式悬浮窗口，可置于任意位置     | 背景透明度与整体透明度分离控制  | 支持按添加时间、书名、作者、最近阅读排序 |
-| 滚轮翻页 / 快捷键翻页 / 自动翻页 | 自定义字体，支持添加系统字体   | 右键编辑元数据（标题、作者、分类） |
-| 只显示完整行，文字不残缺       | 十六进制颜色输入 + 颜色选择器 | 阅读进度持久化，关闭再开继续读   |
-| 文本预处理：压缩空行、清理空白     | 设置实时预览，取消可还原     | 拖拽导入 / 快捷文件导入（`导入书籍`） |
-| 鼠标移出隐藏三模式（关闭/仅进度/全隐藏） | 亮色 / 暗色主题切换     | 书籍信息窗口（封面、简介、分类、阅读统计） |
-| 鼠标移入显示延迟可调         | 列表书架模式           | 多选模式 + 批量重载/删除    |
-| 百分比进度编辑跳转          | 窗口大小锁定           | 重载元数据 / 恢复封面      |
-| 章节列表高亮当前进度         | —                | 书籍分类筛选栏            |
+### 隐阅窗口
+- 悬浮窗口，可置于任意位置
+- 翻页控制：滚轮翻页 / 快捷键翻页 / 自动翻页
+- 进度管理：百分比进度编辑跳转、章节列表高亮当前进度、书签功能（添加/列表/跳转/删除）
+- 全文搜索：搜索全书内容，按句子展示结果，支持分页浏览、关键词高亮、双击跳转
+- 窗口行为：鼠标移出隐藏三模式（不隐藏/仅进度/全隐藏）、移入显示延迟可调、窗口大小锁定
+- 快捷操作：添加书签快捷键（Shift+F）、销毁窗口快捷键（Shift+D）
+
+### 书架管理
+- 书籍导入：拖拽导入 / 快捷文件导入（`导入书籍`）
+- 信息管理：书籍信息窗口（封面、简介、分类、阅读统计）、右键编辑元数据（标题、作者、分类）
+- 批量操作：多选模式 + 批量重载/删除/设置分类、重载元数据 / 恢复封面
+- 阅读状态：已读完标记 + 标记为未读完、书架统计栏（总书籍/已读/阅读时长）
+- 筛选排序：书籍分类筛选栏、按添加时间/书名/作者/最近阅读排序
+
+### 个性化设置
+- 外观控制：背景透明度与整体透明度分离控制、亮色/暗色主题切换、列表书架模式
+- 字体样式：自定义字体（支持添加系统字体）、十六进制颜色输入 + 颜色选择器
+- 配置管理：设置实时预览、取消可还原、多配置方案切换
+
+### 技术特性
+- 只显示完整行，文字不残缺
+- 文本预处理：压缩空行、清理空白
+- 阅读进度持久化，关闭再开继续读
 
 ## 截图
 
-![书架](https://files.seeusercontent.com/2026/06/17/qvX8/image_86.png)
-![暗色模式](https://files.seeusercontent.com/2026/06/17/lu4H/image_85.png)
-![书籍信息](https://files.seeusercontent.com/2026/06/18/D9di/image_90.png)
-![隐阅窗口设置](https://files.seeusercontent.com/2026/06/17/eCu4/image_89.png)
-![功能设置](https://files.seeusercontent.com/2026/06/17/0bqW/image_88.png)
-![其他设置](https://files.seeusercontent.com/2026/06/17/y3uD/image_87.png)
+![书架](https://files.seeusercontent.com/2026/06/24/Pqs5/image_105.png)
+![列表书架](https://files.seeusercontent.com/2026/06/24/1xDq/image_110.png)
+![暗色模式](https://files.seeusercontent.com/2026/06/24/iR3q/image_106.png)
+![右键菜单](https://files.seeusercontent.com/2026/06/24/Mb0u/image_107.png)
+![书籍信息](https://files.seeusercontent.com/2026/06/24/6oZd/image_109.png)
+![章节列表](https://files.seeusercontent.com/2026/06/24/zc1T/image_111.png)
+![书签列表](https://files.seeusercontent.com/2026/06/24/Sur5/image_112.png)
+![搜索跳转](https://files.seeusercontent.com/2026/06/24/5Nhl/image_113.png)
+![书籍分类](https://files.seeusercontent.com/2026/06/24/7xXx/image_114.png)
+![隐阅窗口设置](https://files.seeusercontent.com/2026/06/24/Dl4e/image_115.png)
+![功能设置](https://files.seeusercontent.com/2026/06/24/9Nle/image_117.png)
+![其他设置](https://files.seeusercontent.com/2026/06/24/Wta6/image_118.png)
 ![隐阅效果](https://files.seeusercontent.com/2026/06/18/h1Jb/show.gif)
 
 
@@ -87,6 +107,8 @@ npm run build    # 构建生产版本
 | `categories`       | 分类数组        |
 | `customCoverImage` | 自定义封面       |
 | `fileModifiedAt`   | 文件修改时间      |
+| `isFinished`       | 是否已读完       |
+| `bookmarks`        | 书签列表（章节索引、字符偏移、内容预览、创建时间） |
 
 </details>
 

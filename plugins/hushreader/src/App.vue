@@ -635,7 +635,7 @@ function handleHushreaderCommand(command: HushreaderCommand) {
   else if (command === 'close') closePlugin()
   else if (command === 'auto') toggleAutoPaging()
   else if (command === 'close-reader') { isReaderHidden.value = true; blurHushreaderKeyboard() }
-  else if (command === 'destroy') { saveReadingProgress(); hushreaderActivated.value = false; stopReadingTimer(); hushreaderWindow?.close?.() }
+  else if (command === 'destroy') { saveReadingProgress(); hushreaderActivated.value = false; stopReadingTimer(); hushreaderWindow?.close?.(); hushreaderWindow = null }
   else if (command === 'show-main') { (window as any).ztools?.showMainWindow?.() }
   else if (command === 'stop-auto') { isAutoPaging.value = false; hushreaderCfg.value.autoFlipEnabled = false }
   else if (command === 'start-auto') { if (currentBook.value) { isAutoPaging.value = true; hushreaderCfg.value.autoFlipEnabled = true } }

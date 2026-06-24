@@ -328,18 +328,18 @@ async function restoreCover(bookId: string) {
   if (!book) return
 
   bookStore.updateBook(bookId, { customCoverImage: undefined })
-  removeCustomCover(bookId).catch(() => { })
+  await removeCustomCover(bookId)
 
   if (book.format === 'txt') {
     bookStore.updateBook(bookId, { coverImage: undefined })
-    removeCover(bookId).catch(() => { })
+    await removeCover(bookId)
     toast('封面已恢复为纯色', 'success')
     return
   }
 
   if (configStore.config.other.plainTextCover) {
     bookStore.updateBook(bookId, { coverImage: undefined })
-    removeCover(bookId).catch(() => { })
+    await removeCover(bookId)
     toast('封面已恢复', 'success')
     return
   }
@@ -348,7 +348,7 @@ async function restoreCover(bookId: string) {
     const content = window.services?.readFileBinary?.(book.filePath)
     if (!content) {
       bookStore.updateBook(bookId, { coverImage: undefined })
-      removeCover(bookId).catch(() => { })
+      await removeCover(bookId)
       toast('封面已恢复', 'success')
       return
     }
@@ -371,12 +371,12 @@ async function restoreCover(bookId: string) {
       saveCover(bookId, coverImage).catch(() => { })
     } else {
       bookStore.updateBook(bookId, { coverImage: undefined })
-      removeCover(bookId).catch(() => { })
+      await removeCover(bookId)
     }
     toast('封面已恢复', 'success')
   } catch {
     bookStore.updateBook(bookId, { coverImage: undefined })
-    removeCover(bookId).catch(() => { })
+    await removeCover(bookId)
     toast('封面已恢复', 'success')
   }
 }
@@ -529,10 +529,21 @@ const searchPagedResults = computed(() => {
 
 const searchTotalPages = computed(() => Math.max(1, Math.ceil(searchResults.value.length / SEARCH_PAGE_SIZE)))
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
 function highlightKeyword(text: string, keyword: string): string {
-  if (!keyword) return text
-  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return text.replace(new RegExp(escaped, 'gi'), '<mark>$&</mark>')
+  const safeText = escapeHtml(text)
+  if (!keyword) return safeText
+  const safeKeyword = escapeHtml(keyword)
+  const escaped = safeKeyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return safeText.replace(new RegExp(escaped, 'gi'), '<mark>$&</mark>')
 }
 
 function formatSearchResult(sentence: string, keyword: string): string {
@@ -588,23 +599,30 @@ async function executeSearch() {
     }
 
     const totalLen = fullText.length
-    const boundaryRe = /[。！？…!?\.\」\』\）\】\」]/g
+    const fullTextLower = fullText.toLowerCase()
+    const boundaryRe = /[。！？…!?\.\」\』\）\】\」]/
     const sentenceEndRe = /[。！？…!?\.]/
     const kwLower = keyword.toLowerCase()
+    const BOUNDARY_WINDOW = 200
     const results: typeof searchResults.value = []
     let pos = 0
 
-    while (pos < fullText.length) {
-      const kwIdx = fullText.toLowerCase().indexOf(kwLower, pos)
+    while (pos < fullTextLower.length) {
+      const kwIdx = fullTextLower.indexOf(kwLower, pos)
       if (kwIdx === -1) break
 
       let start = 0
-      const beforeKw = fullText.slice(0, kwIdx)
+      const windowStart = Math.max(0, kwIdx - BOUNDARY_WINDOW)
+      const beforeKw = fullText.slice(windowStart, kwIdx)
       let lastBoundary = -1
-      let m: RegExpExecArray | null
-      boundaryRe.lastIndex = 0
-      while ((m = boundaryRe.exec(beforeKw)) !== null) {
-        lastBoundary = m.index + m[0].length
+      let searchIdx = beforeKw.length
+      while (searchIdx >= 0) {
+        const ch = beforeKw[searchIdx]
+        if (boundaryRe.test(ch)) {
+          lastBoundary = windowStart + searchIdx + 1
+          break
+        }
+        searchIdx--
       }
       if (lastBoundary >= 0) {
         start = lastBoundary
@@ -1140,11 +1158,9 @@ watch(() => configStore.config.other.plainTextCover, async (plain) => {
 
 
 const cfg = computed(() => configStore.config)
-
 const statsTotal = computed(() => bookStore.books.length)
-const statsRead = computed(() => bookStore.books.filter(b => b.lastReadAt).length)
+const statsRead = computed(() => bookStore.books.filter(b => b.finishedAt).length)
 const statsReadingTimeMs = computed(() => bookStore.books.reduce((sum, b) => sum + (b.readingTimeMs || 0), 0))
-
 function formatReadingTime(ms: number): string {
   const totalMin = Math.floor(ms / 60000)
   if (totalMin < 60) return `${totalMin}分钟`
@@ -1178,7 +1194,8 @@ function formatReadingTime(ms: number): string {
       <div class="shelf-actions">
         <button class="icon-btn" :class="{ active: cfg.other.listMode }" :title="cfg.other.listMode ? '卡片视图' : '列表视图'"
           @click="configStore.config.other.listMode = !configStore.config.other.listMode">
-          <svg v-if="cfg.other.listMode" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg v-if="cfg.other.listMode" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2">
             <rect x="3" y="3" width="7" height="7" rx="1" />
             <rect x="14" y="3" width="7" height="7" rx="1" />
             <rect x="3" y="14" width="7" height="7" rx="1" />
