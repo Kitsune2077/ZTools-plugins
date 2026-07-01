@@ -1,28 +1,42 @@
 import { useEffect, useState } from 'react'
 import GoldPrice from './GoldPrice'
 
-const isZTools = typeof window !== 'undefined' && Boolean(window.ztools)
-
 export default function App() {
-  const [enterAction, setEnterAction] = useState<any>({})
-  const [route, setRoute] = useState('')
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    if (!isZTools) return
-    window.ztools.onPluginEnter((action) => {
-      setRoute(action.code)
-      setEnterAction(action)
+    const zt = (window as any).ztools
+    if (!zt) {
+      // 非 ZTools 环境（浏览器开发模式），直接显示
+      setReady(true)
+      return
+    }
+    // ZTools 环境：注册插件生命周期并监听路由
+    zt.onPluginEnter((action: any) => {
+      // 收到 enter 事件后渲染页面
+      setReady(true)
     })
-    window.ztools.onPluginOut(() => {
-      setRoute('')
+    zt.onPluginOut(() => {
+      setReady(false)
     })
   }, [])
 
-  // 非 ZTools 环境（浏览器开发模式），默认显示金价页面
-  if (!isZTools) return <GoldPrice />
+  // 未收到 enter 事件前显示 loading，避免空白闪烁
+  if (!ready) {
+    return (
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        color: '#9ca3af',
+        fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+        fontSize: 14,
+      }}>
+        加载中...
+      </div>
+    )
+  }
 
-  if (route === 'gold') return <GoldPrice />
-
-  // 默认也显示金价页面
   return <GoldPrice />
 }
