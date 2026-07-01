@@ -87,28 +87,42 @@ export default function GoldPrice() {
     setError(null);
 
     try {
-      // 并行请求: Tmini(RMB) + 实时USD + 历史日线
+      // 并行请求: Tmini(RMB) + 实时USD + 历史日线（每个独立容错）
       const [tminiData, usdSpot, histData] = await Promise.all([
-        fetchRealtimeGoldPrice(),
-        fetchCurrentGoldUSD(),
+        fetchRealtimeGoldPrice().catch((err) => {
+          console.error('获取RMB金价失败:', err);
+          return null;
+        }),
+        fetchCurrentGoldUSD().catch((err) => {
+          console.error('获取USD金价失败:', err);
+          return null;
+        }),
         fetchHistoricalPrices().catch(() => [] as HistoricalPrice[]),
       ]);
 
+      if (!tminiData && !usdSpot) {
+        throw new Error('金价数据获取失败，请检查网络连接');
+      }
+
       // 实时 RMB 数据
-      const snap = extractGoldSnapshot(tminiData);
-      setSnapshot(snap);
-      setStores(tminiData.stores || []);
-      setBanks(tminiData.banks  || []);
-      setRecycle(tminiData.recycle || []);
+      if (tminiData) {
+        const snap = extractGoldSnapshot(tminiData);
+        setSnapshot(snap);
+        setStores(tminiData.stores || []);
+        setBanks(tminiData.banks  || []);
+        setRecycle(tminiData.recycle || []);
+      }
 
       // 实时 USD 数据
-      setSpotUSD(usdSpot.price);
+      if (usdSpot) {
+        setSpotUSD(usdSpot.price);
 
-      // 追加本地快照（用USD价格）
-      const usdPrice = usdSpot.price;
-      appendHourlySnapshot(usdPrice);
-      appendDailySnapshot(usdPrice);
-      updateMonthlySnapshot(usdPrice);
+        // 追加本地快照（用USD价格）
+        const usdPrice = usdSpot.price;
+        appendHourlySnapshot(usdPrice);
+        appendDailySnapshot(usdPrice);
+        updateMonthlySnapshot(usdPrice);
+      }
 
       // 合并历史 + 本地每日快照
       const merged = mergeDaily(histData);
@@ -118,7 +132,7 @@ export default function GoldPrice() {
       setLoading(false);
 
       console.log(
-        `[金价] USD $${usdPrice.toFixed(2)} | ` +
+        `[金价] USD ${usdSpot ? `$${usdSpot.price.toFixed(2)}` : 'N/A'} | ` +
         `历史 ${histData.length} 条 (截止 ${histData[histData.length - 1]?.date ?? 'N/A'}) | ` +
         `合并 ${merged.length} 条 (截止 ${merged[merged.length - 1]?.date ?? 'N/A'})`
       );

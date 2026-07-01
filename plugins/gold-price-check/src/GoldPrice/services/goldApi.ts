@@ -87,6 +87,7 @@ export interface MonthlySnapshot {
   avgPrice: number;
   highPrice: number;
   lowPrice: number;
+  count?: number;    // 该月累计记录次数，用于正确计算运行均值
 }
 
 /** 实时金价快照 */
@@ -279,12 +280,14 @@ export function updateMonthlySnapshot(price: number): void {
   if (idx >= 0) {
     // 用新价格更新当月高低均
     const snap = list[idx];
+    const count = snap.count || 1;
     snap.highPrice = Math.max(snap.highPrice, price);
     snap.lowPrice  = Math.min(snap.lowPrice, price);
-    // avgPrice 近似为 (old + new) / 2，简单更新
-    snap.avgPrice = (snap.avgPrice + price) / 2;
+    // 正确的运行均值: (旧均值 × 次数 + 新值) / (次数 + 1)
+    snap.avgPrice = (snap.avgPrice * count + price) / (count + 1);
+    snap.count = count + 1;
   } else {
-    list.push({ month, avgPrice: price, highPrice: price, lowPrice: price });
+    list.push({ month, avgPrice: price, highPrice: price, lowPrice: price, count: 1 });
   }
   const trimmed = list.slice(-60);
   persist(KEY_MONTHLY, trimmed);
@@ -320,6 +323,7 @@ export function getMonthlySnapshots(): MonthlySnapshot[] {
 
 /** 从 Tmini 数据提取金价快照 */
 export function extractGoldSnapshot(data: TminiResponse): GoldPriceSnapshot | null {
+  if (!data || !Array.isArray(data.metals)) return null;
   let metal = data.metals.find(m => m.name === '今日金价' || m.name === '黄金价格');
   if (!metal) metal = data.metals.find(m => m.name.includes('伦敦金') || m.name.includes('现货'));
   if (!metal && data.metals.length > 0) metal = data.metals[0];
@@ -349,14 +353,15 @@ export function extractGoldSnapshot(data: TminiResponse): GoldPriceSnapshot | nu
 export function filterMonthData(data: HistoricalPrice[], year: number, month: number) {
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
   return data
-    .filter(d => d.date.startsWith(prefix))
+    .filter(d => d && d.date && d.date.startsWith(prefix))
     .map(d => ({ date: d.date, price: d.price }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /** 获取最近N天的日线数据 */
 export function getRecentDailyData(data: HistoricalPrice[], days: number) {
-  const sorted = [...data].sort((a, b) => a.date.localeCompare(b.date));
+  const validData = data.filter(d => d && d.date);
+  const sorted = [...validData].sort((a, b) => a.date.localeCompare(b.date));
   return sorted.slice(-days).map(d => ({ date: d.date, price: d.price }));
 }
 
@@ -383,7 +388,7 @@ export function buildYearlyData(
     // 从历史数据聚合
     const prefix = `${month}-`;
     const monthPrices = historicalData
-      .filter(d => d.date.startsWith(prefix))
+      .filter(d => d && d.date && d.date.startsWith(prefix))
       .map(d => d.price);
     if (monthPrices.length > 0) {
       result.push({
@@ -402,14 +407,18 @@ export function getAvailableYears(historicalData: HistoricalPrice[]): number[] {
   const years = new Set<number>();
   // 从历史数据
   for (const item of historicalData) {
-    const y = parseInt(item.date.substring(0, 4), 10);
-    if (!isNaN(y)) years.add(y);
+    if (item && item.date) {
+      const y = parseInt(item.date.substring(0, 4), 10);
+      if (!isNaN(y)) years.add(y);
+    }
   }
   // 从本地快照
   const localDaily = load<HistoricalPrice[]>(KEY_DAILY, []);
   for (const item of localDaily) {
-    const y = parseInt(item.date.substring(0, 4), 10);
-    if (!isNaN(y)) years.add(y);
+    if (item && item.date) {
+      const y = parseInt(item.date.substring(0, 4), 10);
+      if (!isNaN(y)) years.add(y);
+    }
   }
   // 保证今年始终存在
   years.add(new Date().getFullYear());
@@ -421,13 +430,13 @@ export function getAvailableMonths(historicalData: HistoricalPrice[], year: numb
   const months = new Set<number>();
   const prefix = `${year}-`;
   for (const item of historicalData) {
-    if (item.date.startsWith(prefix)) {
+    if (item && item.date && item.date.startsWith(prefix)) {
       months.add(parseInt(item.date.substring(5, 7), 10));
     }
   }
   const localDaily = load<HistoricalPrice[]>(KEY_DAILY, []);
   for (const item of localDaily) {
-    if (item.date.startsWith(prefix)) {
+    if (item && item.date && item.date.startsWith(prefix)) {
       months.add(parseInt(item.date.substring(5, 7), 10));
     }
   }

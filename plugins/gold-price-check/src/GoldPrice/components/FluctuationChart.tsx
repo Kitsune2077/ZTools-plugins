@@ -79,8 +79,8 @@ export default function FluctuationChart({
 
   // 计算价格范围
   const prices = data.map((d) => Number(d[dataKey]) || 0);
-  const minPrice = Math.min(...prices);
-  const maxPrice = Math.max(...prices);
+  const minPrice = prices.length > 0 ? Math.min(...prices) : 0;
+  const maxPrice = prices.length > 0 ? Math.max(...prices) : 100;
   const padding = (maxPrice - minPrice) * 0.1 || 10;
 
   return (
