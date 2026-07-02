@@ -626,7 +626,8 @@
 .cp-arrow {
   flex-shrink: 0;
   color: var(--c-sub);
-  transition: transform var(--t-mid), color var(--t-fast);
+  /* 旋转时长与 .cp-pop 弹出动画对齐（0.2s），避免箭头拖到弹层出现之后再转 */
+  transition: transform 0.2s var(--t-mid), color var(--t-fast);
 }
 .cp-arrow.open {
   transform: rotate(180deg);
@@ -645,11 +646,13 @@
   border-radius: var(--r-md);
   box-shadow: var(--sh-pop);
   overflow: hidden;
-  animation: cp-pop-in 0.2s var(--t-mid);
+  transform-origin: top center;
+  animation: cp-pop-in 0.2s var(--t-mid) both;
+  will-change: transform, opacity;
   min-width: 220px;
 }
 @keyframes cp-pop-in {
-  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 .cp-search {
@@ -737,9 +740,14 @@
   align-items: center;
   justify-content: center;
   z-index: 1000;
-  animation: rate-fade-in 0.25s var(--t-fast);
+  /* 只做纯粹的 fade，避免与子元素 panel 的 translate 叠加 */
+  animation: settings-mask-in 0.22s var(--t-fast) both;
   padding: 16px;
   will-change: opacity;
+}
+@keyframes settings-mask-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 .settings-panel {
   width: 520px;
@@ -751,7 +759,10 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: settings-pop 0.3s var(--t-mid);
+  /* 与 mask 时长对齐，避免出现"mask 停了但 panel 还在动"的错峰 */
+  animation: settings-pop 0.22s var(--t-mid) both;
+  transform-origin: center center;
+  will-change: transform, opacity;
   position: relative;
 }
 .settings-panel::before {
@@ -764,8 +775,8 @@
   background: var(--g-brand);
 }
 @keyframes settings-pop {
-  from { opacity: 0; transform: scale(0.96) translateY(10px); }
-  to { opacity: 1; transform: scale(1) translateY(0); }
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
 }
 .settings-head {
   display: flex;
@@ -858,11 +869,10 @@
   height: 2px;
   background: var(--c-blue);
   border-radius: 2px 2px 0 0;
-  animation: tab-line 0.25s var(--t-mid);
-}
-@keyframes tab-line {
-  from { transform: scaleX(0); }
-  to { transform: scaleX(1); }
+  /* 面板初次打开时不重复播放下划线动画，仅在用户手动切换 tab 时才做过渡 */
+  transition: transform var(--t-mid);
+  transform: scaleX(1);
+  transform-origin: center;
 }
 
 .settings-providers {
@@ -917,11 +927,7 @@
   inset: 2px;
   border-radius: 50%;
   background: var(--g-brand);
-  animation: radio-pop 0.25s var(--t-fast);
-}
-@keyframes radio-pop {
-  from { transform: scale(0); }
-  to { transform: scale(1); }
+  /* 移除 radio-pop 弹出动画 — 面板打开时"已选中"项不应重播弹跳 */
 }
 .provider-desc {
   font-size: 11px;

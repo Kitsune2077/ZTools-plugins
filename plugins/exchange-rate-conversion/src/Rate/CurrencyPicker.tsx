@@ -12,7 +12,6 @@ const CurrencyPicker = memo(function CurrencyPicker({ value, onChange }: Currenc
   const [activeIdx, setActiveIdx] = useState(0)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
   const openRef = useRef(false)
 
   const cur = useMemo(() => CURRENCIES.find((c) => c.code === value), [value])
@@ -28,13 +27,11 @@ const CurrencyPicker = memo(function CurrencyPicker({ value, onChange }: Currenc
     )
   }, [query])
 
-  // 打开时聚焦搜索框 + 重置高亮
+  // 打开时重置搜索/高亮（focus 由 <input autoFocus /> 在挂载即接管，避免 setTimeout 造成的无焦点闪一下）
   useEffect(() => {
     if (open) {
       setQuery('')
       setActiveIdx(0)
-      const timer = setTimeout(() => inputRef.current?.focus(), 30)
-      return () => clearTimeout(timer)
     }
   }, [open])
 
@@ -127,11 +124,11 @@ const CurrencyPicker = memo(function CurrencyPicker({ value, onChange }: Currenc
               <path d="M11 11l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
             <input
-              ref={inputRef}
               type="text"
               className="cp-search-input"
               placeholder="搜索货币代码或名称"
               value={query}
+              autoFocus
               onChange={(e) => {
                 setQuery(e.target.value)
                 setActiveIdx(0)

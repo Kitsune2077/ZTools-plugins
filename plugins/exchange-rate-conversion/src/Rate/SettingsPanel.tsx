@@ -20,11 +20,11 @@ const TABS: { key: ProviderRegion; label: string }[] = [
 ]
 
 const SettingsPanel = memo(function SettingsPanel({ onClose, onSaved }: SettingsPanelProps) {
+  // 一次读盘，同时决定初始 cfg 与初始 tab，避免调用两次 loadConfig
   const [cfg, setCfg] = useState<ProviderConfig>(() => loadConfig())
-  // tab 初始值直接从 cfg.active 所在区域计算，避免 useEffect 后二次渲染
   const [tab, setTab] = useState<ProviderRegion>(() => {
-    const active = PROVIDERS.find((p) => p.id === loadConfig().active)
-    return active?.region || 'overseas'
+    const initial = loadConfig()
+    return PROVIDERS.find((p) => p.id === initial.active)?.region || 'overseas'
   })
   const [testing, setTesting] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
