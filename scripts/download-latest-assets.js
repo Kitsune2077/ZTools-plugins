@@ -453,9 +453,18 @@ function normalizePluginForServer(plugin) {
     logo: normalizeString(plugin.logo),
     name: normalizeString(plugin.name),
     homepage: normalizeNullableString(plugin.homepage),
+    platform: normalizePlatform(plugin.platform),
     downloadUrl: normalizeString(plugin.downloadUrl || plugin.downloadURL || plugin.download_url),
     size: normalizeSize(plugin.size),
   };
+}
+
+function normalizePlatform(platform) {
+  if (!Array.isArray(platform)) {
+    return [];
+  }
+
+  return [...new Set(platform.map(normalizeString).filter(Boolean))];
 }
 
 function getThirdPartyPluginsEndpoint() {
