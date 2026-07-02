@@ -157,6 +157,8 @@ export default function Rate({ enterAction }: RateProps) {
   const lastFromRef = useRef(from)
   const lastToRef = useRef(to)
   useEffect(() => {
+    // 初始化时不触发（initRef 还是 false）
+    if (!initRef.current) return
     if (from === lastFromRef.current && to === lastToRef.current) return
     lastFromRef.current = from
     lastToRef.current = to
@@ -205,14 +207,18 @@ export default function Rate({ enterAction }: RateProps) {
     setSeriesSupported(supportsHistory())
     const hasK = !!(c.keys[c.active] && c.keys[c.active].trim())
     setHasKey(hasK)
+    setShowSettings(false)
+    // 延迟刷新：等弹窗关闭动画完成后再拉数据，避免 DOM 抖动
     if (hasK) {
-      refresh(from, to, seriesRange, true).catch((e: any) => {
-        setErr(e?.message || '获取汇率失败')
-        setRate(null)
-      }).finally(() => {
-        setLoading(false)
-        setSeriesLoading(false)
-      })
+      setTimeout(() => {
+        refresh(from, to, seriesRange, true).catch((e: any) => {
+          setErr(e?.message || '获取汇率失败')
+          setRate(null)
+        }).finally(() => {
+          setLoading(false)
+          setSeriesLoading(false)
+        })
+      }, 350)
     }
   }, [from, to, seriesRange, refresh])
 

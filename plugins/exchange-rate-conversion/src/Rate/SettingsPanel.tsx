@@ -21,21 +21,21 @@ const TABS: { key: ProviderRegion; label: string }[] = [
 
 const SettingsPanel = memo(function SettingsPanel({ onClose, onSaved }: SettingsPanelProps) {
   const [cfg, setCfg] = useState<ProviderConfig>(() => loadConfig())
-  const [tab, setTab] = useState<ProviderRegion>('overseas')
+  // tab 初始值直接从 cfg.active 所在区域计算，避免 useEffect 后二次渲染
+  const [tab, setTab] = useState<ProviderRegion>(() => {
+    const active = PROVIDERS.find((p) => p.id === loadConfig().active)
+    return active?.region || 'overseas'
+  })
   const [testing, setTesting] = useState(false)
   const [savedFlash, setSavedFlash] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const mountedRef = useRef(false)
 
-  // 初始化时定位到当前选中渠道所在的 tab
   useEffect(() => {
-    const active = PROVIDERS.find((p) => p.id === cfg.active)
-    if (active) setTab(active.region)
     mountedRef.current = true
     return () => {
       mountedRef.current = false
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const onSetActive = useCallback((id: string) => {

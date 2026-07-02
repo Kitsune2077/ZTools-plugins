@@ -1,5 +1,5 @@
 :root {
-  --blue: rgb(88, 164, 246);
+  --blue: rgb(59, 130, 246);
   --light: #fff;
 }
 
@@ -7,13 +7,14 @@ html,
 body {
   margin: 0;
   padding: 0;
+  background: var(--c-bg, #f8fbff);
 }
 
 button {
   border: none;
-  background: none var(--blue);
-  color: var(--light);
-  line-height: 2.5;
+  background: none;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
   transition: opacity 0.2s;
 }
@@ -30,30 +31,4 @@ button:not(:disabled):active {
 textarea {
   display: block;
   margin: 0;
-}
-
-@media (prefers-color-scheme: light) {
-  body {
-    background-color: #f4f4f4;
-  }
-  ::-webkit-scrollbar-track-piece {
-    background-color: #f4f4f4;
-  }
-  ::-webkit-scrollbar-thumb {
-    border-color: #f4f4f4;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  &::-webkit-scrollbar-track-piece {
-    background-color: #303133;
-  }
-  &::-webkit-scrollbar-thumb {
-    background-color: #666;
-    border-color: #303133;
-  }
-  body {
-    background-color: #303133;
-    color: #fff;
-  }
 }

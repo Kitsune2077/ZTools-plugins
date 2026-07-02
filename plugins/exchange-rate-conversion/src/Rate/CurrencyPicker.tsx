@@ -1,27 +1,21 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { CURRENCIES, type Currency } from '../api/currencies'
 
 interface CurrencyPickerProps {
   value: string
   onChange: (code: string) => void
-  label?: string
 }
 
-/**
- * 自定义货币选择器
- * - 触发器：旗帜 + code + 中文名 + 下拉箭头
- * - 弹层：搜索框（按 code/中文名/英文名过滤）+ 列表 + 键盘上下/回车/Esc
- * - 样式贴合紫橙 SaaS 主题
- */
-export default function CurrencyPicker({ value, onChange, label }: CurrencyPickerProps) {
+const CurrencyPicker = memo(function CurrencyPicker({ value, onChange }: CurrencyPickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const popRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const openRef = useRef(false)
 
-  const cur = CURRENCIES.find((c) => c.code === value)
+  const cur = useMemo(() => CURRENCIES.find((c) => c.code === value), [value])
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -39,21 +33,18 @@ export default function CurrencyPicker({ value, onChange, label }: CurrencyPicke
     if (open) {
       setQuery('')
       setActiveIdx(0)
-      setTimeout(() => inputRef.current?.focus(), 30)
+      const timer = setTimeout(() => inputRef.current?.focus(), 30)
+      return () => clearTimeout(timer)
     }
   }, [open])
 
-  // 当前值变化时把高亮跳到该项
+  // 点击外部关闭 — 用 openRef 避免闭包陷阱
   useEffect(() => {
-    if (!open) return
-    const idx = filtered.findIndex((c) => c.code === value)
-    setActiveIdx(idx >= 0 ? idx : 0)
-  }, [value, open, filtered])
-
-  // 点击外部关闭
+    openRef.current = open
+  }, [open])
   useEffect(() => {
-    if (!open) return
     const onDoc = (e: MouseEvent) => {
+      if (!openRef.current) return
       if (
         triggerRef.current?.contains(e.target as Node) ||
         popRef.current?.contains(e.target as Node)
@@ -62,7 +53,7 @@ export default function CurrencyPicker({ value, onChange, label }: CurrencyPicke
     }
     document.addEventListener('mousedown', onDoc)
     return () => document.removeEventListener('mousedown', onDoc)
-  }, [open])
+  }, [])
 
   // 滚动高亮项到可视区
   useEffect(() => {
@@ -176,4 +167,6 @@ export default function CurrencyPicker({ value, onChange, label }: CurrencyPicke
       )}
     </div>
   )
-}
+})
+
+export default CurrencyPicker
