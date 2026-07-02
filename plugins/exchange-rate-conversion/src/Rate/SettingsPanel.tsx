@@ -32,6 +32,9 @@ const SettingsPanel = memo(function SettingsPanel({ onClose, onSaved }: Settings
     const active = PROVIDERS.find((p) => p.id === cfg.active)
     if (active) setTab(active.region)
     mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -48,7 +51,9 @@ const SettingsPanel = memo(function SettingsPanel({ onClose, onSaved }: Settings
   const onSave = useCallback(() => {
     saveConfig(cfg)
     setSavedFlash(true)
-    setTimeout(() => setSavedFlash(false), 1500)
+    const timer = setTimeout(() => {
+      if (mountedRef.current) setSavedFlash(false)
+    }, 1500)
     onSaved()
   }, [cfg, onSaved])
 
@@ -57,8 +62,10 @@ const SettingsPanel = memo(function SettingsPanel({ onClose, onSaved }: Settings
     setTestResult(null)
     const key = cfg.keys[cfg.active] || ''
     const r = await testConnection(cfg.active, key)
-    setTestResult(r)
-    setTesting(false)
+    if (mountedRef.current) {
+      setTestResult(r)
+      setTesting(false)
+    }
   }, [cfg.active, cfg.keys])
 
   const active = PROVIDERS.find((p) => p.id === cfg.active)

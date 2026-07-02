@@ -83,18 +83,31 @@ async function openexchangerate_series(
 ): Promise<TimeSeriesResult> {
   const meta = getProvider('openexchangerate')!
   const fixedBase = meta.fixedBase || 'USD'
-  const points: TimeSeriesResult['points'] = []
   const s = new Date(startDate)
   const e = new Date(endDate)
+  const dates: string[] = []
   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-    const date = d.toISOString().slice(0, 10)
-    const params = new URLSearchParams({ app_id: key, base: fixedBase, symbols: `${from},${to}` })
-    const res = await fetch(`https://openexchangerates.org/api/historical/${date}.json?${params}`)
-    if (!res.ok) continue
-    const j: OpenExchangeLatest = await res.json()
-    const r = crossRate(j.rates, from, to)
-    if (r !== null) points.push({ date, rates: { [to]: r } })
+    dates.push(d.toISOString().slice(0, 10))
   }
+
+  const promises = dates.map(async (date) => {
+    const params = new URLSearchParams({ app_id: key, base: fixedBase, symbols: `${from},${to}` })
+    try {
+      const res = await fetch(`https://openexchangerates.org/api/historical/${date}.json?${params}`)
+      if (!res.ok) return null
+      const j: OpenExchangeLatest = await res.json()
+      const r = crossRate(j.rates, from, to)
+      return r !== null ? { date, rates: { [to]: r } } : null
+    } catch {
+      return null
+    }
+  })
+
+  const results = await Promise.all(promises)
+  const points: TimeSeriesResult['points'] = results
+    .filter((p): p is { date: string; rates: Record<string, number> } => p !== null)
+    .sort((a, b) => a.date.localeCompare(b.date))
+
   if (!points.length) throw new Error('OXR 历史数据为空')
   return { amount: 1, base: from, startDate, endDate, points }
 }

@@ -76,8 +76,13 @@ export default function TrendChart({ series, target, loading }: TrendChartProps)
     // Y 轴 4 个刻度
     const ticksY = [0, 1, 2, 3, 4].map((k) => lo + ((hi - lo) * k) / 4)
 
-    // X 轴：首/中/尾 三个日期标签
-    const labelIdx = [0, Math.floor((pts.length - 1) / 2), pts.length - 1]
+    // X 轴：根据数据点数量动态生成标签索引，避免重叠
+    const labelIdx =
+      pts.length >= 3
+        ? [0, Math.floor((pts.length - 1) / 2), pts.length - 1]
+        : pts.length === 2
+        ? [0, 1]
+        : [0]
     const xLabels = labelIdx.map((i) => ({
       x: xScale(i),
       label: pts[i]?.date.slice(5) ?? '',

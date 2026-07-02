@@ -167,9 +167,14 @@ export default function Rate({ enterAction }: RateProps) {
       setLoading(false)
       setSeriesLoading(false)
     })
-    saveLastState({ from, to, amount: amountNum || 1 })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, to, seriesRange, amountNum])
+  }, [from, to, seriesRange])
+
+  // 持久化保存上次状态（货币变化 + 金额变化）
+  useEffect(() => {
+    if (!initRef.current) return
+    saveLastState({ from, to, amount: amountNum || 1 })
+  }, [from, to, amountNum])
 
   // 切换时间范围 - 只刷走势
   useEffect(() => {
