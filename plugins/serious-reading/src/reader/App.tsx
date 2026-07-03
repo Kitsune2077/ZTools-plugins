@@ -93,19 +93,29 @@ export default function App() {
     measure.style.fontWeight = String(settings.reader.fontWeight)
     measure.innerHTML = chapterHtml
     const nodes: { height: number; html: string }[] = []
-    measure.childNodes.forEach((node) => {
-      if (node.nodeType === 3 && node.textContent?.trim()) {
-        const span = document.createElement('span')
-        span.textContent = node.textContent
-        measure.replaceChild(span, node)
-        const cs = getComputedStyle(span)
-        nodes.push({ height: span.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom), html: span.outerHTML })
-      } else if (node.nodeType === 1) {
-        const el = node as HTMLElement
-        const cs = getComputedStyle(el)
-        nodes.push({ height: el.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom), html: el.outerHTML })
+    const blockTags = ['P', 'DIV', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'LI', 'PRE', 'TABLE', 'SECTION', 'ARTICLE', 'BODY']
+    function collectFrom(parent: Node) {
+      const children = Array.from(parent.childNodes)
+      for (const node of children) {
+        if (node.nodeType === 3 && node.textContent?.trim()) {
+          const span = document.createElement('span')
+          span.textContent = node.textContent
+          node.parentNode?.replaceChild(span, node)
+          const cs = getComputedStyle(span)
+          nodes.push({ height: span.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom), html: span.outerHTML })
+        } else if (node.nodeType === 1) {
+          const el = node as HTMLElement
+          const hasBlockChildren = Array.from(el.children).some((child) => blockTags.includes(child.tagName))
+          if (hasBlockChildren) {
+            collectFrom(el)
+          } else {
+            const cs = getComputedStyle(el)
+            nodes.push({ height: el.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom), html: el.outerHTML })
+          }
+        }
       }
-    })
+    }
+    collectFrom(measure)
     const result: string[] = []
     let cur = ''
     let used = 0

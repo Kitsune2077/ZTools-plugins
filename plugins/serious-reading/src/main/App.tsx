@@ -88,14 +88,15 @@ export default function App() {
     const ext = (filePath.split('.').pop() || '').toLowerCase() as BookFormat
     const format = fmt ?? (['txt', 'epub', 'pdf'].includes(ext) ? ext : 'txt')
     let book: ParsedBook | null = null
+    let epubData: EBook | null = null
     const svc = window.services
     try {
       if (format === 'txt') {
         const txt = svc?.readTxt(filePath)
         if (txt) book = parseTxt(txt, filePath)
       } else if (format === 'epub') {
-        const eb = svc?.readEpub(filePath)
-        if (eb) book = buildEpub(eb, filePath)
+        epubData = svc?.readEpub(filePath) ?? null
+        if (epubData) book = buildEpub(epubData, filePath)
       } else if (format === 'pdf') {
         const buf = svc?.readPdf(filePath)
         if (buf) book = buildPdf(filePath, 0) // PDF 总页数由阅读窗 pdfjs 获取
@@ -117,13 +118,9 @@ export default function App() {
           updateBookInShelf(exist.id, { totalChapters: book.totalChapters })
         }
       }
-    } else if (format === 'epub') {
-      // save cover (extracted from EBook.cover via services.readEpub already returns cover buffer)
-      const eb = svc?.readEpub(filePath)
-      if (eb?.cover) {
-        saveCover(sb.id, eb.cover)
-        refreshCovers()
-      }
+    } else if (format === 'epub' && epubData?.cover) {
+      saveCover(sb.id, epubData.cover)
+      refreshCovers()
     }
     setShelf(getShelf())
     addRecentBook({ filePath, title: book.title, format, lastRead: Date.now() })
@@ -159,8 +156,7 @@ export default function App() {
       <header className="flex items-center gap-2 border-b px-4 py-3">
         <div className="flex items-center gap-2 font-semibold">
           <BookOpen className="h-4 w-4 text-primary" />
-          <span>Serious</span>
-          <span className="text-primary">Reading</span>
+          <span>严肃阅读</span>
         </div>
         <div className="ml-auto flex items-center gap-2">
           <Button size="sm" onClick={() => pickFile()}>

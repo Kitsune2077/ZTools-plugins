@@ -162,7 +162,7 @@ window.services = {
   },
 
   showOpenDialog(options) {
-    return ztools.showOpenDialog(options)
+    return window.ztools.showOpenDialog(options)
   },
 
   /* ---------------- 悬浮阅读窗管理 ---------------- */
@@ -178,7 +178,7 @@ window.services = {
       return window.services._readerWin
     }
     const settings = state.settings || {}
-    const saved = ztools.dbStorage.getItem('serious_reading/winpos') || {}
+    const saved = window.ztools.dbStorage.getItem('serious_reading/winpos') || {}
     const w = saved.width || settings.window?.width || 520
     const h = saved.height || settings.window?.height || 780
     const x = saved.x != null ? saved.x : window.screenLeft + 90
@@ -188,7 +188,7 @@ window.services = {
 
     const readerPreloadPath = path.join(__dirname, 'reader.js')
 
-    const win = ztools.createBrowserWindow(readerUrl, {
+    const win = window.ztools.createBrowserWindow(readerUrl, {
       width: w,
       height: h,
       x: x,
@@ -225,7 +225,7 @@ window.services = {
           const p = win.getPosition()
           const s = win.getSize()
           if (s[0] > 120 && s[1] > 120 && s[0] < 8000 && s[1] < 8000) {
-            ztools.dbStorage.setItem('serious_reading/winpos', { x: p[0], y: p[1], width: s[0], height: s[1] })
+            window.ztools.dbStorage.setItem('serious_reading/winpos', { x: p[0], y: p[1], width: s[0], height: s[1] })
           }
         } catch (e) {}
       }, 300)
@@ -274,10 +274,10 @@ window._ipcRenderer = ipcRenderer
 ipcRenderer.on('sr:save-progress', function (e, pg) {
   if (!pg || !pg.filePath) return
   // 保存 ReadingProgress
-  try { ztools.dbStorage.setItem(DB_PREFIX + 'progress/' + pg.filePath, pg) } catch (e2) {}
+  try { window.ztools.dbStorage.setItem(DB_PREFIX + 'progress/' + pg.filePath, pg) } catch (e2) {}
   // 更新书架书籍的 lastChapter
   try {
-    const doc = ztools.db.get(BOOKS_DOC_ID)
+    const doc = window.ztools.db.get(BOOKS_DOC_ID)
     if (doc && Array.isArray(doc.data)) {
       const idx = doc.data.findIndex(function (b) { return b.path === pg.filePath })
       if (idx >= 0) {
@@ -285,7 +285,7 @@ ipcRenderer.on('sr:save-progress', function (e, pg) {
         doc.data[idx].progress = pg.charOffset
         doc.data[idx].lastRead = Date.now()
         if (pg.totalChapters != null) doc.data[idx].totalChapters = pg.totalChapters
-        ztools.db.put(doc)
+        window.ztools.db.put(doc)
       }
     }
   } catch (e2) {}
@@ -302,7 +302,7 @@ ipcRenderer.on('sr:hide-reader', function () {
 // 阅读窗 → 主窗：保存窗口位置/尺寸
 ipcRenderer.on('sr:save-bounds', function (e, data) {
   if (data && data.x != null && data.width > 0) {
-    try { ztools.dbStorage.setItem('serious_reading/winpos', data) } catch (e2) {}
+    try { window.ztools.dbStorage.setItem('serious_reading/winpos', data) } catch (e2) {}
   }
 })
 
@@ -339,7 +339,7 @@ ipcRenderer.on('sr:win-end', function () {
   if (win && !win.isDestroyed()) {
     try {
       const b = win.getBounds()
-      ztools.dbStorage.setItem('serious_reading/winpos', { x: b.x, y: b.y, width: b.width, height: b.height })
+      window.ztools.dbStorage.setItem('serious_reading/winpos', { x: b.x, y: b.y, width: b.width, height: b.height })
     } catch (e) {}
   }
 })

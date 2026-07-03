@@ -70,21 +70,45 @@ window.services = {
       const spineRegex = /<itemref\s+idref="([^"]+)"/g
       let sMatch
       while ((sMatch = spineRegex.exec(opfXml)) !== null) spineItems.push(sMatch[1])
+      // ncx toc
+      const ncxIdMatch = opfXml.match(/<spine[^>]*toc="([^"]+)"/)
+      const toc = []
+      if (ncxIdMatch) {
+        const ncxItem = manifest[ncxIdMatch[1]]
+        if (ncxItem) {
+          const ncxXml = zip.readAsText(opfDir + ncxItem.href)
+          if (ncxXml) {
+            const navRegex = /<navPoint[^>]*playOrder="(\d+)"[^>]*>[\s\S]*?<text>([^<]+)<\/text>[\s\S]*?<content\s+src="([^"]+)"/g
+            let npMatch
+            while ((npMatch = navRegex.exec(ncxXml)) !== null) {
+              toc.push({ order: parseInt(npMatch[1]), title: npMatch[2], src: npMatch[3] })
+            }
+          }
+        }
+      }
       const chapters = []
       spineItems.forEach(function (id, idx) {
         const item = manifest[id]
         if (!item || !item.type.match(/html|xhtml/)) return
         const html = zip.readAsText(opfDir + item.href)
         if (!html) return
-        chapters.push({ title: '第 ' + (idx + 1) + ' 章', content: html, index: idx })
+        let title = ''
+        const tocItem = toc.find(function (t) { return t.src && t.src.includes(item.href) })
+        if (tocItem) title = tocItem.title
+        if (!title) title = '第 ' + (idx + 1) + ' 章'
+        chapters.push({ title: title, content: html, index: idx })
       })
       const titleMatch = opfXml.match(/<dc:title[^>]*>([^<]+)<\/dc:title>/)
       return {
-        title: titleMatch ? titleMatch[1] : filePath.split(/[\\/]/).pop(),
+        title: titleMatch ? titleMatch[1] : extractName(filePath),
         filePath: filePath, format: 'epub', chapters: chapters, totalChapters: chapters.length,
       }
     } catch (e) { return null }
   },
+}
+
+function extractName(p) {
+  return (p.split(/[\\/]/).pop() || p).replace(/\.[^.]+$/, '')
 }
 
 window._ipcRenderer = ipcRenderer
@@ -106,8 +130,8 @@ window._sendToParent = function (channel, data) {
   try {
     if (_replyToParent) {
       _replyToParent(channel, data)
-    } else if (typeof ztools !== 'undefined' && ztools.sendToParent) {
-      ztools.sendToParent(channel, data)
+    } else if (window.ztools && window.ztools.sendToParent) {
+      window.ztools.sendToParent(channel, data)
     } else {
       ipcRenderer.send(channel, data)
     }

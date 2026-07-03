@@ -1,7 +1,7 @@
 {
   "name": "serious-reading-zt",
-  "version": "1.0.0",
-  "description": "隐私小说阅读器 ZTools 插件 - 支持 TXT/EPUB/PDF，透明留窗伪装模式",
+  "version": "1.1.0",
+  "description": "严肃阅读 - ZTools 插件，支持 TXT/EPUB/PDF，透明留窗伪装模式",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -20,13 +20,16 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.4",
+    "dompurify": "^3.4.11",
     "lucide-react": "^0.453.0",
     "pdfjs-dist": "^4.6.82",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.5.4"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "devDependencies": {
     "@types/node": "^22.7.5",
     "@types/react": "^18.3.11",

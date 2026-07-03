@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify'
 import type { ParsedBook, Chapter, BookFormat } from './types'
 
 /** 中文小说章节标题正则（沿用 Serious-Reading 验证过的模式） */
@@ -99,15 +100,14 @@ export function searchChapters(chapters: Chapter[], keyword: string) {
   return chapters.filter((c) => c.title.toLowerCase().includes(kw))
 }
 
-/** 渲染章节正文为安全 HTML（剥离 epub 的 img/style/script） */
+/** 渲染章节正文为安全 HTML（使用 DOMPurify 清洗 EPUB 的 XSS 载荷） */
 export function renderChapterHtml(content: string, format: BookFormat, cleanEmptyLines = false): string {
   if (format === 'epub') {
-    return content
-      .replace(/<img[^>]*>/g, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<\/?a[^>]*>/g, '')
-      .replace(/\bp[>]/g, 'p style="text-indent:2em;margin:0 0 .15em 0;line-height:inherit">')
+    const clean = DOMPurify.sanitize(content, {
+      FORBID_TAGS: ['img', 'a', 'style', 'script', 'iframe', 'object', 'embed', 'link', 'meta', 'form', 'input'],
+      FORBID_ATTR: ['src', 'href', 'srcset'],
+    })
+    return clean.replace(/<p[^>]*>/g, '<p style="text-indent:2em;margin:0 0 .15em 0;line-height:inherit">')
   }
   // TXT：按段落包 <p>，首行缩进两字，段间留白
   if (!cleanEmptyLines) {

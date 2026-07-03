@@ -42,11 +42,11 @@ export function SearchDialog(props: {
     const chapters = props.parsed.chapters
     let chapter = 0
     for (let i = 0; i < chapters.length; i++) {
-      if ((chapters[i].charOffset ?? 0) <= offset && offset < (chapters[i].charOffset ?? 0) + (chapters[i].charLength ?? 0)) {
+      const nextOffset = chapters[i + 1] ? (chapters[i + 1].charOffset ?? Infinity) : Infinity
+      if ((chapters[i].charOffset ?? 0) <= offset && offset < nextOffset) {
         chapter = i
         break
       }
-      if (i === chapters.length - 1) chapter = i
     }
     props.onSkip(chapter, offset)
   }
