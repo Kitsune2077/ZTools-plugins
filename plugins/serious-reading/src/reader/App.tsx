@@ -75,7 +75,15 @@ export default function App() {
   const currentChapter = book?.chapters[chapterIdx] ?? null
   useEffect(() => { setChapter(currentChapter) }, [currentChapter])
   const chapterHtml = useMemo(
-    () => (book && chapter ? renderChapterHtml(chapter.content, book.format, settings.reader.cleanEmptyLines) : ''),
+    () => {
+      if (!book || !chapter) return ''
+      const body = renderChapterHtml(chapter.content, book.format, settings.reader.cleanEmptyLines)
+      if (book.format === 'txt' && chapter.title && chapter.title !== '全文') {
+        const esc = chapter.title.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        return `<h2 style="text-align:center;margin:0 0 .8em 0;font-size:1.05em;font-weight:700;line-height:inherit">${esc}</h2>${body}`
+      }
+      return body
+    },
     [book, chapter, settings.reader.cleanEmptyLines],
   )
 
