@@ -3,9 +3,12 @@
   "title": "严肃阅读",
   "description": "一款对待摸鱼阅读很严肃的阅读插件",
   "version": "1.1.0",
-  "main": "dist/index.html",
+  "main": "index.html",
   "logo": "logo.svg",
   "preload": "preload/main.js",
+  "development": {
+    "main": "http://localhost:5173/"
+  },
   "pluginSetting": {
     "single": true,
     "height": 660

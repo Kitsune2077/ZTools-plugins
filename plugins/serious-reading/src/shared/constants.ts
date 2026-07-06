@@ -39,13 +39,14 @@ export const DEFAULT_SETTINGS: Settings = {
     fontWeight: 400,
     cleanEmptyLines: false,
   },
-  page: { arrow: true, wheel: true, click: true, pgupdn: true, space: false, touch: true, transition: 'none' },
+  page: { arrow: true, wheel: true, click: true, pgupdn: true, space: false, transition: 'none' },
   hide: {
-    stealthHide: ['escape', 'dblclick', 'mouseleave'],
+    stealthHide: ['escape', 'mouseleave'],
     stealthShow: ['middleClick'],
     realHide: ['rightClick'],
   },
   autoPage: { interval: 0, pauseOnStealth: true },
+  showProgressBar: true,
 }
 
 export const SUPPORTED_EXTS = ['txt', 'epub', 'pdf']
@@ -62,4 +63,9 @@ export const FONT_OPTIONS: { value: string; label: string }[] = [
   { value: "'Source Han Serif SC', '思源宋体', serif", label: '思源宋体' },
   { value: "Georgia, 'Times New Roman', serif", label: 'Georgia' },
   { value: "'Courier New', monospace", label: 'Courier New' },
+  { value: "'JetBrains Mono', 'Cascadia Code', monospace", label: 'JetBrains Mono' },
+  { value: "Consolas, 'Cascadia Code', monospace", label: 'Consolas' },
+  { value: "'SF Mono', 'JetBrains Mono', monospace", label: 'SF Mono' },
+  { value: "'Cascadia Code', Consolas, monospace", label: 'Cascadia Code' },
+  { value: "Menlo, 'SF Mono', monospace", label: 'Menlo' },
 ]

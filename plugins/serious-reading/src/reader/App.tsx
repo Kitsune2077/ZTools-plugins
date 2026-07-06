@@ -204,6 +204,7 @@ export default function App() {
       const pg: ReadingProgress = {
         filePath: book.filePath, format: book.format,
         chapterIndex: book.format === 'pdf' ? pdfPage : chapterIdx,
+        chapterTitle: book.format === 'pdf' ? `第${pdfPage}页` : (book.chapters[chapterIdx]?.title || ''),
         pageIndex, charOffset, totalChapters: book.totalChapters, timestamp: Date.now(),
       }
       saveProgress(pg)
@@ -246,14 +247,6 @@ export default function App() {
     const onWheel = (e: WheelEvent) => {
       if (pageCfgRef.current.wheel) { e.preventDefault(); if (e.deltaY > 0 || e.deltaX > 0) nextPageRef.current(); else prevPageRef.current() }
     }
-    let tx = 0, ty = 0
-    const onTouchStart = (e: TouchEvent) => { tx = e.touches[0].clientX; ty = e.touches[0].clientY }
-    const onTouchEnd = (e: TouchEvent) => {
-      if (!pageCfgRef.current.touch) return
-      const dx = e.changedTouches[0].clientX - tx
-      const dy = e.changedTouches[0].clientY - ty
-      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) { if (dx < 0) nextPageRef.current(); else prevPageRef.current() }
-    }
     document.addEventListener('keydown', onKey)
     document.addEventListener('dblclick', onDbl)
     document.addEventListener('mousedown', onDown)
@@ -261,8 +254,6 @@ export default function App() {
     document.addEventListener('mouseleave', onLeave)
     document.addEventListener('mouseenter', onEnter)
     document.addEventListener('wheel', onWheel, { passive: false })
-    document.addEventListener('touchstart', onTouchStart)
-    document.addEventListener('touchend', onTouchEnd)
     return () => {
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('dblclick', onDbl)
@@ -271,8 +262,6 @@ export default function App() {
       document.removeEventListener('mouseleave', onLeave)
       document.removeEventListener('mouseenter', onEnter)
       document.removeEventListener('wheel', onWheel)
-      document.removeEventListener('touchstart', onTouchStart)
-      document.removeEventListener('touchend', onTouchEnd)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -404,7 +393,7 @@ export default function App() {
             ) : null}
 
             {/* 进度条 */}
-            {!stealth && (
+            {!stealth && settings.showProgressBar && (
               <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-black/5">
                 <div className="h-full bg-black/25" style={{ width: ((pages.length ? (pageIndex + 1) / pages.length : 1)) * 100 + '%' }} />
               </div>

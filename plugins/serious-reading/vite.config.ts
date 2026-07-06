@@ -2,23 +2,11 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { copyFileSync } from 'node:fs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
-  plugins: [
-    react(),
-    {
-      name: 'copy-logo',
-      closeBundle() {
-        copyFileSync(
-          path.resolve(__dirname, 'logo.svg'),
-          path.resolve(__dirname, 'dist/logo.svg')
-        )
-      },
-    },
-  ],
+  plugins: [react()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),

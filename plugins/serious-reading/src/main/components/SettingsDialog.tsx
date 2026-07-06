@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
-import type { Settings, TriggerKey, HideActions } from '@/shared/types'
+import type { Settings, TriggerKey, HideActions, Preset } from '@/shared/types'
 import { TRIGGER_OPTIONS, detectConflicts, DEFAULT_SETTINGS, FONT_OPTIONS } from '@/shared/constants'
-import { saveSettings } from '@/shared/storage'
+import { saveSettings, getPresets, addPreset, updatePreset, deletePreset, autoPresetName } from '@/shared/storage'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,13 +10,12 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 
-const PAGE_KEYS: { key: 'arrow' | 'wheel' | 'click' | 'pgupdn' | 'space' | 'touch'; label: string }[] = [
+const PAGE_KEYS: { key: 'arrow' | 'wheel' | 'click' | 'pgupdn' | 'space'; label: string }[] = [
   { key: 'arrow', label: '键盘 ←→' },
   { key: 'wheel', label: '滚轮' },
   { key: 'click', label: '点击左右' },
   { key: 'pgupdn', label: 'PageUp/Down' },
   { key: 'space', label: '空格' },
-  { key: 'touch', label: '触摸滑动' },
 ]
 
 export function SettingsDialog(props: {
@@ -27,10 +26,13 @@ export function SettingsDialog(props: {
   setTheme: (t: Settings['theme']) => void
 }) {
   const [draft, setDraft] = useState<Settings>(props.settings)
+  const [presets, setPresets] = useState<Preset[]>([])
+  const [presetName, setPresetName] = useState('')
   const conflicts = detectConflicts(draft.hide)
   const conflictCount = Object.values(conflicts).filter(Boolean).length
 
   useEffect(() => { setDraft(props.settings) }, [props.settings, props.open])
+  useEffect(() => { if (props.open) setPresets(getPresets()) }, [props.open])
 
   function patch(p: Partial<Settings>) { setDraft({ ...draft, ...p }) }
   function patchReader(p: Partial<Settings['reader']>) { setDraft({ ...draft, reader: { ...draft.reader, ...p } }) }
@@ -42,24 +44,71 @@ export function SettingsDialog(props: {
     patchHide({ [group]: arr.includes(key) ? arr.filter((k) => k !== key) : [...arr, key] } as any)
   }
 
+  function applyPreset(p: Preset) {
+    setDraft(JSON.parse(JSON.stringify(p.settings)))
+    saveSettings(p.settings)
+    props.setSettings(p.settings)
+    ;(window as any).services?.sendToReader?.('sr:settings', p.settings)
+    setPresetName(p.name)
+  }
+
+  function handleDeletePreset(id: string) {
+    deletePreset(id)
+    setPresets(getPresets())
+  }
+
   function save() {
     if (conflictCount > 0) return
     saveSettings(draft)
     props.setSettings(draft)
-    // 推送给已打开的阅读窗，实时生效（字号/行高/透明度/触发器等）
     ;(window as any).services?.sendToReader?.('sr:settings', draft)
+    // 保存为预设（同名更新，否则新建）
+    const name = presetName.trim() || autoPresetName()
+    const existing = getPresets().find((p) => p.name === name)
+    if (existing) updatePreset(existing.id, draft)
+    else addPreset(name, draft)
+    setPresets(getPresets())
     props.onOpenChange(false)
   }
   function reset() { setDraft(JSON.parse(JSON.stringify(DEFAULT_SETTINGS))) }
 
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>设置</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* 配置方案 */}
+          <Section title="配置方案">
+            {presets.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {presets.map((p) => (
+                  <span
+                    key={p.id}
+                    className="inline-flex items-center gap-1 rounded-md border bg-muted/50 px-2 py-1 text-xs cursor-pointer hover:bg-muted"
+                    onClick={() => applyPreset(p)}
+                  >
+                    {p.name}
+                    <span
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={(e) => { e.stopPropagation(); handleDeletePreset(p.id) }}
+                    >
+                      ×
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
+            <Input
+              placeholder="保存为配置名称（留空自动命名）"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              className="h-8 text-sm"
+            />
+          </Section>
+
           {/* 主题 */}
           <Section title="界面主题">
             <div className="flex gap-2">
@@ -86,7 +135,7 @@ export function SettingsDialog(props: {
                 <Slider min={1} max={3} step={0.05} value={[draft.reader.lineHeight]} onValueChange={(v) => patchReader({ lineHeight: v[0] })} />
               </Field>
               <Field label={`字重 ${draft.reader.fontWeight}`}>
-                <Slider min={50} max={1000} step={50} value={[draft.reader.fontWeight]} onValueChange={(v) => patchReader({ fontWeight: v[0] })} />
+                <Slider min={50} max={1000} step={1} value={[draft.reader.fontWeight]} onValueChange={(v) => patchReader({ fontWeight: v[0] })} />
               </Field>
                <Field label="字体">
                  <FontSelect value={draft.reader.fontFamily} onChange={(v) => patchReader({ fontFamily: v })} />
@@ -132,9 +181,9 @@ export function SettingsDialog(props: {
                 <div className="mb-1 text-xs font-medium text-muted-foreground">
                   {g === 'stealthHide' ? '隐身（显→隐）' : g === 'stealthShow' ? '显示（隐→显）' : '真隐藏（彻底消失，命令恢复）'}
                 </div>
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-nowrap gap-2">
                   {TRIGGER_OPTIONS.map((o) => (
-                    <label key={o.key} className={`flex items-center gap-1.5 rounded px-1 text-sm ${conflicts[o.key] ? 'text-destructive' : ''}`}>
+                    <label key={o.key} className={`flex items-center gap-1 rounded px-0.5 text-sm whitespace-nowrap ${conflicts[o.key] ? 'text-destructive' : ''}`}>
                       <Checkbox checked={draft.hide[g].includes(o.key)} onCheckedChange={() => toggleTrigger(g, o.key)} />
                       {o.label}
                     </label>
@@ -155,6 +204,14 @@ export function SettingsDialog(props: {
             <label className="flex items-center gap-2 text-sm">
               <Switch checked={draft.autoPage.pauseOnStealth} onCheckedChange={(v) => setDraft({ ...draft, autoPage: { ...draft.autoPage, pauseOnStealth: v } })} />
               stealth 隐藏时自动暂停
+            </label>
+          </Section>
+
+          {/* 进度条 */}
+          <Section title="阅读窗进度条">
+            <label className="flex items-center gap-2 text-sm">
+              <Switch checked={draft.showProgressBar} onCheckedChange={(v) => patch({ showProgressBar: v })} />
+              显示底部进度条
             </label>
           </Section>
         </div>
@@ -191,6 +248,9 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (v: string)
   const [picking, setPicking] = useState(false)
   const [screenImg, setScreenImg] = useState<string | null>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const magRef = useRef<HTMLCanvasElement>(null)
+  const [hoverColor, setHoverColor] = useState<string | null>(null)
+  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 })
   useEffect(() => { setHex(value) }, [value])
 
   useEffect(() => {
@@ -204,7 +264,7 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (v: string)
     img.src = screenImg
   }, [screenImg])
 
-  function startPick() {
+  async function startPick() {
     const zt = window.ztools
     if (!zt?.screenCapture) { ref.current?.click(); return }
     zt.hideMainWindow?.(true)
@@ -212,43 +272,78 @@ function ColorPicker({ value, onChange }: { value: string; onChange: (v: string)
       try {
         zt.screenCapture!((img) => {
           zt.showMainWindow?.()
-          if (typeof img === 'string' && img.startsWith('data:')) {
-            setScreenImg(img)
-            setPicking(true)
-          } else {
-            ref.current?.click()
-          }
+          if (typeof img === 'string' && img.startsWith('data:')) { setScreenImg(img); setPicking(true) }
+          else { ref.current?.click() }
         })
-      } catch {
-        zt.showMainWindow?.()
-        ref.current?.click()
-      }
+      } catch { zt.showMainWindow?.(); ref.current?.click() }
     }, 300)
   }
 
-  function handlePickClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (!canvasRef.current) return
-    const rect = canvasRef.current.getBoundingClientRect()
-    const sx = canvasRef.current.width / rect.width
-    const sy = canvasRef.current.height / rect.height
-    const x = Math.floor((e.clientX - rect.left) * sx)
-    const y = Math.floor((e.clientY - rect.top) * sy)
-    const ctx = canvasRef.current.getContext('2d')
-    if (!ctx) return
+  function getColorAt(clientX: number, clientY: number): string | null {
+    if (!canvasRef.current) return null
+    const c = canvasRef.current
+    const rect = c.getBoundingClientRect()
+    const sx = c.width / rect.width, sy = c.height / rect.height
+    const x = Math.floor((clientX - rect.left) * sx)
+    const y = Math.floor((clientY - rect.top) * sy)
+    const ctx = c.getContext('2d')
+    if (!ctx) return null
     const px = ctx.getImageData(x, y, 1, 1).data
-    const c = '#' + [px[0], px[1], px[2]].map((v) => v.toString(16).padStart(2, '0')).join('')
-    onChange(c); setHex(c); setPicking(false); setScreenImg(null)
+    return '#' + [px[0], px[1], px[2]].map((v) => v.toString(16).padStart(2, '0')).join('')
   }
+
+  function drawMagnifier(clientX: number, clientY: number) {
+    if (!canvasRef.current || !magRef.current) return
+    const src = canvasRef.current, mag = magRef.current
+    const mctx = mag.getContext('2d')
+    if (!mctx) return
+    const rect = src.getBoundingClientRect()
+    const sx = src.width / rect.width, sy = src.height / rect.height
+    const cx = Math.floor((clientX - rect.left) * sx), cy = Math.floor((clientY - rect.top) * sy)
+    const size = 100, zoom = 10
+    mag.width = size; mag.height = size
+    mctx.imageSmoothingEnabled = false
+    mctx.fillStyle = '#000'; mctx.fillRect(0, 0, size, size)
+    const half = Math.floor(size / zoom / 2)
+    mctx.drawImage(src, cx - half, cy - half, size / zoom, size / zoom, 0, 0, size, size)
+    mctx.strokeStyle = '#fff'; mctx.lineWidth = 1
+    mctx.beginPath(); mctx.moveTo(size / 2, 0); mctx.lineTo(size / 2, size); mctx.moveTo(0, size / 2); mctx.lineTo(size, size / 2); mctx.stroke()
+    mctx.strokeStyle = 'rgba(255,255,255,0.8)'; mctx.lineWidth = 2
+    mctx.beginPath(); mctx.arc(size / 2, size / 2, size / 2 - 1, 0, Math.PI * 2); mctx.stroke()
+  }
+
+  function handlePickMove(e: React.MouseEvent<HTMLDivElement>) {
+    const c = getColorAt(e.clientX, e.clientY)
+    if (c) setHoverColor(c)
+    setCursorPos({ x: e.clientX, y: e.clientY })
+    drawMagnifier(e.clientX, e.clientY)
+  }
+
+  function handlePickClick(e: React.MouseEvent<HTMLDivElement>) {
+    const c = getColorAt(e.clientX, e.clientY)
+    if (c) { onChange(c); setHex(c) }
+    setPicking(false); setScreenImg(null); setHoverColor(null)
+  }
+
+  const magOff = 24
+  const magX = cursorPos.x + magOff + 100 > window.innerWidth ? cursorPos.x - magOff - 100 : cursorPos.x + magOff
+  const magY = cursorPos.y + magOff + 100 > window.innerHeight ? cursorPos.y - magOff - 100 : cursorPos.y + magOff
 
   return (
     <>
       {picking && screenImg && (
-        <div className="fixed inset-0 z-[9999] cursor-crosshair" onClick={handlePickClick} onKeyDown={(e) => { if (e.key === 'Escape') { setPicking(false); setScreenImg(null) } }}>
-          <canvas
-            ref={canvasRef}
-            className="h-full w-full"
-          />
-          <div className="pointer-events-none fixed top-4 left-1/2 -translate-x-1/2 rounded bg-black/70 px-4 py-2 text-sm text-white">点击任意位置取色 · Esc 取消</div>
+        <div className="fixed inset-0 z-[9999] cursor-crosshair" onMouseMove={handlePickMove} onClick={handlePickClick} onKeyDown={(e) => { if (e.key === 'Escape') { setPicking(false); setScreenImg(null); setHoverColor(null) } }}>
+          <canvas ref={canvasRef} className="h-full w-full" />
+          <div className="pointer-events-none fixed" style={{ left: magX, top: magY }}>
+            <canvas ref={magRef} width={100} height={100} className="rounded-full border-2 border-white shadow-xl" />
+          </div>
+          {hoverColor && (
+            <div className="pointer-events-none fixed flex items-center gap-2 rounded bg-black/70 px-3 py-1.5 text-sm text-white" style={{ left: magX, top: magY + 108 }}>
+              <div className="h-4 w-4 rounded border border-white/50" style={{ background: hoverColor }} />
+              <span className="font-mono">{hoverColor.toUpperCase()}</span>
+            </div>
+          )}
+          <div className="pointer-events-none fixed top-4 left-1/2 -translate-x-1/2 rounded bg-black/70 px-4 py-2 text-sm text-white">点击取色 · Esc 取消</div>
         </div>
       )}
       <div className="flex items-center gap-2">

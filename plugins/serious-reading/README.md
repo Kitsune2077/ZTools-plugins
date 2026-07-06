@@ -3,6 +3,8 @@
 > 一款对待摸鱼阅读很严肃的阅读插件
 支持 TXT / EPUB / PDF 三种格式，专为「在工作间隙低调阅读」设计——悬浮透明阅读窗、老板键伪装隐藏、自动翻页、全屏取色配色，让你严肃地摸鱼。
 
+![image-20260706160738389](https://img.taitres.com/uploads/2026/07/06/6a4b626680056.png)
+
 ## 快速开始
 
 
@@ -60,7 +62,7 @@
 npm install
 
 # 2. 安装 preload 原生依赖（不编译，随源码提交）
-cd preload && npm install && cd ..
+cd public/preload && npm install && cd ../..
 
 # 3. 开发模式（Vite dev server :5173，ZTools 开发者工具以本目录为根加载）
 npm run dev
@@ -78,6 +80,6 @@ npm install -g @ztools-center/plugin-cli
 # 发布到 ZTools 插件中心
 ztools publish
 ```
-为什么做这个插件？
+## 为什么做这个插件？
 
 之前一直使用utools的插件摸鱼阅读，但是使用时一直感觉摸鱼阅读限制太多，不能随时移动和调整阅读框大小，于是用AI重新开发了这个插件，感谢摸鱼阅读的开发者。

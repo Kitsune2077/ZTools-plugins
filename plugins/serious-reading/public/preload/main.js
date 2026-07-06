@@ -97,19 +97,23 @@ window.services = {
       const opfXml = zip.readAsText(opfPath)
       if (!opfXml) return null
 
-      // manifest
+      // manifest（属性顺序不固定，逐个提取）
       const manifest = {}
-      const manifestRegex = /<item\s+[^>]*id="([^"]+)"[^>]*href="([^"]+)"[^>]*media-type="([^"]+)"[^>]*/g
+      const itemRegex = /<item\s+([^>]+)[\/]?>/g
       let mMatch
-      while ((mMatch = manifestRegex.exec(opfXml)) !== null) {
-        manifest[mMatch[1]] = { href: mMatch[2], type: mMatch[3] }
+      while ((mMatch = itemRegex.exec(opfXml)) !== null) {
+        const attrs = mMatch[1]
+        const idM = attrs.match(/id="([^"]+)"/)
+        const hrefM = attrs.match(/href="([^"]+)"/)
+        const typeM = attrs.match(/media-type="([^"]+)"/)
+        if (idM && hrefM && typeM) manifest[idM[1]] = { href: hrefM[1], type: typeM[1] }
       }
       // spine
       const spineItems = []
       const spineRegex = /<itemref\s+idref="([^"]+)"/g
       let sMatch
       while ((sMatch = spineRegex.exec(opfXml)) !== null) spineItems.push(sMatch[1])
-      // ncx toc
+      // ncx toc（不要求 playOrder）
       const ncxIdMatch = opfXml.match(/<spine[^>]*toc="([^"]+)"/)
       const toc = []
       if (ncxIdMatch) {
@@ -117,10 +121,10 @@ window.services = {
         if (ncxItem) {
           const ncxXml = zip.readAsText(opfDir + ncxItem.href)
           if (ncxXml) {
-            const navRegex = /<navPoint[^>]*playOrder="(\d+)"[^>]*>[\s\S]*?<text>([^<]+)<\/text>[\s\S]*?<content\s+src="([^"]+)"/g
+            const navRegex = /<navPoint[\s\S]*?<text>([^<]+)<\/text>[\s\S]*?<content\s+src="([^"]+)"/g
             let npMatch
             while ((npMatch = navRegex.exec(ncxXml)) !== null) {
-              toc.push({ order: parseInt(npMatch[1]), title: npMatch[2], src: npMatch[3] })
+              toc.push({ title: npMatch[1], src: npMatch[2] })
             }
           }
         }
@@ -135,7 +139,7 @@ window.services = {
       }
 
       const chapters = []
-      spineItems.forEach(function (id, idx) {
+      spineItems.forEach(function (id) {
         const item = manifest[id]
         if (!item || !item.type.match(/html|xhtml/)) return
         const html = zip.readAsText(opfDir + item.href)
@@ -143,8 +147,8 @@ window.services = {
         let title = ''
         const tocItem = toc.find((t) => t.src && t.src.includes(item.href))
         if (tocItem) title = tocItem.title
-        if (!title) title = '第 ' + (idx + 1) + ' 章'
-        chapters.push({ title: title, content: html, index: idx })
+        if (!title) title = '第 ' + (chapters.length + 1) + ' 章'
+        chapters.push({ title: title, content: html, index: chapters.length })
       })
 
       const titleMatch = opfXml.match(/<dc:title[^>]*>([^<]+)<\/dc:title>/)
@@ -184,7 +188,7 @@ window.services = {
     const x = saved.x != null ? saved.x : window.screenLeft + 90
     const y = saved.y != null ? saved.y : window.screenTop + 180
 
-    const readerUrl = 'dist/reader.html'
+    const readerUrl = window.ztools && window.ztools.isDev ? (window.ztools.isDev() ? 'http://localhost:5173/reader.html' : 'reader.html') : 'reader.html'
 
     const readerPreloadPath = path.join(__dirname, 'reader.js')
 
@@ -282,6 +286,7 @@ ipcRenderer.on('sr:save-progress', function (e, pg) {
       const idx = doc.data.findIndex(function (b) { return b.path === pg.filePath })
       if (idx >= 0) {
         doc.data[idx].lastChapter = pg.chapterIndex
+        if (pg.chapterTitle) doc.data[idx].lastChapterTitle = pg.chapterTitle
         doc.data[idx].progress = pg.charOffset
         doc.data[idx].lastRead = Date.now()
         if (pg.totalChapters != null) doc.data[idx].totalChapters = pg.totalChapters

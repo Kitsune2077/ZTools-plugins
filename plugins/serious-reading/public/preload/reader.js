@@ -63,14 +63,20 @@ window.services = {
       const opfXml = zip.readAsText(opfPath)
       if (!opfXml) return null
       const manifest = {}
-      const manifestRegex = /<item\s+[^>]*id="([^"]+)"[^>]*href="([^"]+)"[^>]*media-type="([^"]+)"[^>]*/g
+      const itemRegex = /<item\s+([^>]+)[\/]?>/g
       let mMatch
-      while ((mMatch = manifestRegex.exec(opfXml)) !== null) manifest[mMatch[1]] = { href: mMatch[2], type: mMatch[3] }
+      while ((mMatch = itemRegex.exec(opfXml)) !== null) {
+        const attrs = mMatch[1]
+        const idM = attrs.match(/id="([^"]+)"/)
+        const hrefM = attrs.match(/href="([^"]+)"/)
+        const typeM = attrs.match(/media-type="([^"]+)"/)
+        if (idM && hrefM && typeM) manifest[idM[1]] = { href: hrefM[1], type: typeM[1] }
+      }
       const spineItems = []
       const spineRegex = /<itemref\s+idref="([^"]+)"/g
       let sMatch
       while ((sMatch = spineRegex.exec(opfXml)) !== null) spineItems.push(sMatch[1])
-      // ncx toc
+      // ncx toc（不要求 playOrder）
       const ncxIdMatch = opfXml.match(/<spine[^>]*toc="([^"]+)"/)
       const toc = []
       if (ncxIdMatch) {
@@ -78,16 +84,16 @@ window.services = {
         if (ncxItem) {
           const ncxXml = zip.readAsText(opfDir + ncxItem.href)
           if (ncxXml) {
-            const navRegex = /<navPoint[^>]*playOrder="(\d+)"[^>]*>[\s\S]*?<text>([^<]+)<\/text>[\s\S]*?<content\s+src="([^"]+)"/g
+            const navRegex = /<navPoint[\s\S]*?<text>([^<]+)<\/text>[\s\S]*?<content\s+src="([^"]+)"/g
             let npMatch
             while ((npMatch = navRegex.exec(ncxXml)) !== null) {
-              toc.push({ order: parseInt(npMatch[1]), title: npMatch[2], src: npMatch[3] })
+              toc.push({ title: npMatch[1], src: npMatch[2] })
             }
           }
         }
       }
       const chapters = []
-      spineItems.forEach(function (id, idx) {
+      spineItems.forEach(function (id) {
         const item = manifest[id]
         if (!item || !item.type.match(/html|xhtml/)) return
         const html = zip.readAsText(opfDir + item.href)
@@ -95,8 +101,8 @@ window.services = {
         let title = ''
         const tocItem = toc.find(function (t) { return t.src && t.src.includes(item.href) })
         if (tocItem) title = tocItem.title
-        if (!title) title = '第 ' + (idx + 1) + ' 章'
-        chapters.push({ title: title, content: html, index: idx })
+        if (!title) title = '第 ' + (chapters.length + 1) + ' 章'
+        chapters.push({ title: title, content: html, index: chapters.length })
       })
       const titleMatch = opfXml.match(/<dc:title[^>]*>([^<]+)<\/dc:title>/)
       return {

@@ -14,6 +14,8 @@ export interface ShelfBook {
   totalChapters?: number
   /** 上次阅读的章节索引（章节模型进度） */
   lastChapter?: number
+  /** 上次阅读的章节标题（书架卡片显示用） */
+  lastChapterTitle?: string
   /** 上次阅读的字符/页偏移（用于恢复进度） */
   progress?: number
   lastRead?: number
@@ -69,7 +71,6 @@ export interface PageActions {
   click: boolean
   pgupdn: boolean
   space: boolean
-  touch: boolean
   /** 翻页过渡：'none' 无动画，'slide' 滑动 */
   transition: 'none' | 'slide'
 }
@@ -102,6 +103,15 @@ export interface Settings {
   page: PageActions
   hide: HideActions
   autoPage: AutoPageSetting
+  /** 阅读窗底部进度条是否显示 */
+  showProgressBar: boolean
+}
+
+/** 设置预设（多套配置保存与切换） */
+export interface Preset {
+  id: string
+  name: string
+  settings: Settings
 }
 
 /** 阅读进度记录（按书籍路径存储） */
@@ -110,6 +120,8 @@ export interface ReadingProgress {
   format: BookFormat
   /** 章节索引或 PDF 页码 */
   chapterIndex: number
+  /** 章节标题（书架卡片显示用） */
+  chapterTitle?: string
   /** 章内页索引（TXT/EPUB 高度分页）或 0 */
   pageIndex: number
   /** 字符偏移（百分比跳转用，TXT） */

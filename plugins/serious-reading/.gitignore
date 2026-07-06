@@ -1,5 +1,5 @@
 node_modules/
-!preload/node_modules/
+!public/preload/node_modules/
 dist/
 .git/
 *.log

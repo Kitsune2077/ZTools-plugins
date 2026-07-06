@@ -3,6 +3,7 @@ import type {
   ReadingProgress,
   RecentBook,
   ShelfBook,
+  Preset,
 } from './types'
 import { DB_PREFIX, DEFAULT_SETTINGS } from './constants'
 
@@ -28,6 +29,38 @@ export function getSettings(): Settings {
 
 export function saveSettings(s: Settings) {
   zt()?.dbStorage.setItem(SET_KEY, s)
+}
+
+/* ---------------- 预设（多套配置） ---------------- */
+
+const PRESETS_KEY = DB_PREFIX + 'presets'
+
+export function getPresets(): Preset[] {
+  return zt()?.dbStorage.getItem(PRESETS_KEY) ?? []
+}
+
+export function addPreset(name: string, settings: Settings): Preset {
+  const list = getPresets()
+  const preset: Preset = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, settings: JSON.parse(JSON.stringify(settings)) }
+  list.push(preset)
+  zt()?.dbStorage.setItem(PRESETS_KEY, list)
+  return preset
+}
+
+export function updatePreset(id: string, settings: Settings) {
+  const list = getPresets().map((p) => p.id === id ? { ...p, settings: JSON.parse(JSON.stringify(settings)) } : p)
+  zt()?.dbStorage.setItem(PRESETS_KEY, list)
+}
+
+export function deletePreset(id: string) {
+  zt()?.dbStorage.setItem(PRESETS_KEY, getPresets().filter((p) => p.id !== id))
+}
+
+export function autoPresetName(): string {
+  const list = getPresets()
+  let n = 1
+  while (list.some((p) => p.name === `配置${n}`)) n++
+  return `配置${n}`
 }
 
 export function getWindowPos(): { x: number; y: number; width: number; height: number } | null {

@@ -30,7 +30,7 @@ export function BookCard(props: {
         <div className="absolute bottom-1 left-1 right-1 flex items-center justify-between gap-1">
           {props.book.lastChapter != null && (
             <span className="truncate rounded bg-black/60 px-1 text-[10px] text-white">
-              第{props.book.totalChapters ? `${props.book.lastChapter + 1}/${props.book.totalChapters}` : `${props.book.lastChapter + 1}`}章
+              {props.book.lastChapterTitle || `第${(props.book.lastChapter ?? 0) + 1}章`}
             </span>
           )}
           {props.progress > 0 && (
