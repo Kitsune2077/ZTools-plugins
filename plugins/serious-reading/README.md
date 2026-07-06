@@ -58,16 +58,13 @@
 ## 开发
 
 ```bash
-# 1. 安装前端依赖
+# 1. 安装前端依赖（postinstall 会自动安装 preload 原生依赖）
 npm install
 
-# 2. 安装 preload 原生依赖（不编译，随源码提交）
-cd public/preload && npm install && cd ../..
-
-# 3. 开发模式（Vite dev server :5173，ZTools 开发者工具以本目录为根加载）
+# 2. 开发模式（Vite dev server :5173，ZTools 开发者工具以本目录为根加载）
 npm run dev
 
-# 4. 构建产物到 dist/
+# 3. 构建产物到 dist/
 npm run build
 ```
 
