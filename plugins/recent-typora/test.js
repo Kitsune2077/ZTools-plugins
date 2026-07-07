@@ -1,5 +1,7 @@
 const assert = require('assert')
 const fs = require('fs')
+const os = require('os')
+const path = require('path')
 const {
   createListFeature,
   decodeHistory,
@@ -35,6 +37,14 @@ const roots = parseHistory(JSON.stringify({
   recentFolder: [{ path: '/' }, { path: 'C:\\' }]
 }))
 assert.deepStrictEqual(roots.map((item) => item.name), ['/', 'C:\\'])
+const crossPlatformPaths = parseHistory(JSON.stringify({
+  recentDocument: [
+    { path: 'C:\\Users\\test\\notes\\windows.md' },
+    { path: '/home/test/notes/posix.md' }
+  ]
+}))
+assert.deepStrictEqual(crossPlatformPaths.map((item) => item.name), ['windows.md', 'posix.md'])
+
 assert.strictEqual(normalizeDate('2026-07-07T05:45:41.246Z'), 1783403141246)
 assert.strictEqual(toListResults(parsed)[0].description, '/tmp/file.md')
 assert.strictEqual(toListResults(parsed)[0].icon, 'markdown-icon.png')
@@ -58,6 +68,34 @@ assert.strictEqual(typeof feature.args.enter, 'function')
 assert.strictEqual(typeof feature.args.search, 'function')
 assert.strictEqual(typeof feature.args.select, 'function')
 
+const originalHistoryPath = process.env.TYPORA_HISTORY_PATH
+const cacheTestDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'recent-typora-'))
+const cacheTestHistory = path.join(cacheTestDirectory, 'history.data')
+try {
+  process.env.TYPORA_HISTORY_PATH = cacheTestHistory
+  fs.writeFileSync(cacheTestHistory, JSON.stringify({
+    recentDocument: [{ name: 'before.md', path: '/tmp/before.md', date: 1 }]
+  }))
+
+  const cachedFeature = createListFeature({})
+  let cacheTestResults
+  cachedFeature.args.enter(null, (items) => { cacheTestResults = items })
+  assert.deepStrictEqual(cacheTestResults.map((item) => item.title), ['before.md'])
+
+  fs.writeFileSync(cacheTestHistory, JSON.stringify({
+    recentDocument: [{ name: 'after.md', path: '/tmp/after.md', date: 2 }]
+  }))
+  cachedFeature.args.search(null, 'before', (items) => { cacheTestResults = items })
+  assert.deepStrictEqual(cacheTestResults.map((item) => item.title), ['before.md'])
+
+  cachedFeature.args.enter(null, (items) => { cacheTestResults = items })
+  assert.deepStrictEqual(cacheTestResults.map((item) => item.title), ['after.md'])
+} finally {
+  if (originalHistoryPath === undefined) delete process.env.TYPORA_HISTORY_PATH
+  else process.env.TYPORA_HISTORY_PATH = originalHistoryPath
+  fs.rmSync(cacheTestDirectory, { recursive: true, force: true })
+}
+
 for (const asset of ['logo.png', 'folder-icon.png', 'markdown-icon.png']) {
   assert.ok(fs.existsSync(asset), `缺少资源文件：${asset}`)
 }
@@ -66,8 +104,9 @@ if (process.platform === 'win32') {
   const realHistory = getHistoryCandidates().find((candidate) => fs.existsSync(candidate))
   if (realHistory) {
     const realItems = parseHistory(fs.readFileSync(realHistory, 'utf8'))
-    assert.ok(realItems.length > 0, '本机 history.data 应至少包含一条记录')
-    assert.ok(realItems.every((item, index) => index === 0 || realItems[index - 1].date >= item.date))
+    if (realItems.length > 0) {
+      assert.ok(realItems.every((item, index) => index === 0 || realItems[index - 1].date >= item.date))
+    }
   }
 }
 

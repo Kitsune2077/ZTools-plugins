@@ -57,7 +57,7 @@ function parseHistory(raw) {
     for (const item of items) {
       if (!item || typeof item.path !== 'string' || !item.path.trim()) continue
       records.push({
-        name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : (path.basename(item.path) || item.path),
+        name: typeof item.name === 'string' && item.name.trim() ? item.name.trim() : (path.win32.basename(item.path) || item.path),
         path: item.path,
         date: normalizeDate(item.date),
         type
@@ -96,11 +96,15 @@ function toListResults(items, searchWord = '') {
     .filter((item) => !keyword || item.title.toLowerCase().includes(keyword) || item.path.toLowerCase().includes(keyword))
 }
 
-function loadList(searchWord = '') {
+let cachedItems = null
+
+function loadList(searchWord = '', forceRefresh = false) {
   try {
-    const items = readRecentItems()
-    return items.length
-      ? toListResults(items, searchWord)
+    if (forceRefresh || !cachedItems) {
+      cachedItems = readRecentItems()
+    }
+    return cachedItems.length
+      ? toListResults(cachedItems, searchWord)
       : [{ title: '暂无最近记录', description: 'Typora 的 history.data 中没有文件或文件夹' }]
   } catch (error) {
     console.error('[recent-typora]', error)
@@ -129,21 +133,28 @@ function getTyporaLaunch(target, platform = process.platform, env = process.env,
 }
 
 function openInTypora(target, onError = console.error) {
-  const launch = getTyporaLaunch(target)
-  const child = spawn(launch.command, launch.args, {
-    detached: true,
-    stdio: 'ignore',
-    windowsHide: true
-  })
-  child.once('error', onError)
-  child.unref()
+  try {
+    const launch = getTyporaLaunch(target)
+    const child = spawn(launch.command, launch.args, {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true
+    })
+    child.once('error', onError)
+    child.unref()
+  } catch (error) {
+    onError(error)
+  }
 }
 
 function createListFeature(ztools) {
   return {
     mode: 'list',
     args: {
-      enter: (action, callbackSetList) => callbackSetList(loadList()),
+      enter: (action, callbackSetList) => {
+        cachedItems = null
+        callbackSetList(loadList('', true))
+      },
       search: (action, searchWord, callbackSetList) => callbackSetList(loadList(searchWord)),
       select: (action, itemData) => {
         if (!itemData || !itemData.path) return
