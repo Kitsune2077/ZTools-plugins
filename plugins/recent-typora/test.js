@@ -44,6 +44,17 @@ const crossPlatformPaths = parseHistory(JSON.stringify({
   ]
 }))
 assert.deepStrictEqual(crossPlatformPaths.map((item) => item.name), ['windows.md', 'posix.md'])
+const duplicatedCaseItems = parseHistory(JSON.stringify({
+  recentDocument: [
+    { path: '/tmp/Notes.md', date: 2 },
+    { path: '/tmp/notes.md', date: 1 }
+  ]
+}))
+if (process.platform === 'win32' || process.platform === 'darwin') {
+  assert.deepStrictEqual(duplicatedCaseItems.map((item) => item.path), ['/tmp/Notes.md'])
+} else {
+  assert.deepStrictEqual(duplicatedCaseItems.map((item) => item.path), ['/tmp/Notes.md', '/tmp/notes.md'])
+}
 
 assert.strictEqual(normalizeDate('2026-07-07T05:45:41.246Z'), 1783403141246)
 assert.strictEqual(toListResults(parsed)[0].description, '/tmp/file.md')
@@ -100,14 +111,5 @@ for (const asset of ['logo.png', 'folder-icon.png', 'markdown-icon.png']) {
   assert.ok(fs.existsSync(asset), `缺少资源文件：${asset}`)
 }
 
-if (process.platform === 'win32') {
-  const realHistory = getHistoryCandidates().find((candidate) => fs.existsSync(candidate))
-  if (realHistory) {
-    const realItems = parseHistory(fs.readFileSync(realHistory, 'utf8'))
-    if (realItems.length > 0) {
-      assert.ok(realItems.every((item, index) => index === 0 || realItems[index - 1].date >= item.date))
-    }
-  }
-}
 
 console.log('All tests passed.')

@@ -69,7 +69,7 @@ function parseHistory(raw) {
 
   const seen = new Set()
   return records.filter((item) => {
-    const key = process.platform === 'win32' ? item.path.toLowerCase() : item.path
+    const key = (process.platform === 'win32' || process.platform === 'darwin') ? item.path.toLowerCase() : item.path
     if (seen.has(key)) return false
     seen.add(key)
     return true
