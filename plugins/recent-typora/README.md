@@ -12,24 +12,20 @@ QuickTypora 插件地址：https://www.u-tools.cn/plugins/detail/QuickTypora/
 
 ## 使用方法
 
-1. 在 ZTools 开发者工具中加载本目录。
-2. 输入 `rt`、`typo` 或 `recent typora`，回车进入插件。
-3. 在列表中选择最近文件或文件夹，回车后使用 Typora 打开。
-4. 可在插件顶部的搜索框中按名称或路径筛选。
+1. 输入 `rt`、`typo` 或 `recent typora`，回车进入插件。
+2. 在列表中选择最近文件或文件夹，回车或鼠标单击后，将自动使用 Typora 打开所选文件或文件夹。
+3. 可在插件顶部的搜索框中按名称或路径筛选。
 
 修改代码或配置后，如果效果没有更新，请从系统托盘彻底退出并重新启动 ZTools。ZTools 可能会保留已加载的 Preload 进程。
 
 ## 功能
 
-- 合并显示 Typora 最近打开的文件和文件夹
-- 按最近打开时间从新到旧排序
+- 只读访问 Typora 文件夹下的`history.data`，获取最近使用 Typora 打开的文件和文件夹列表，按最近打开时间从新到旧排序
 - 在插件内部按名称或完整路径搜索
 - 使用不同图标区分 Markdown 文件与文件夹
 - 选择任一项目后，显式使用 Typora 打开
-- 每次进入或搜索时重新读取历史记录，不缓存数据
-- 只读访问 `history.data`，不会修改 Typora 数据
 
-## Typora 历史文件位置
+## Typora的history.data位置
 
 插件默认查找：
 
@@ -44,7 +40,7 @@ QuickTypora 插件地址：https://www.u-tools.cn/plugins/detail/QuickTypora/
 TYPORA_HISTORY_PATH=history.data 的完整路径
 ```
 
-目前确认的数据格式是“UTF-8 JSON 转十六进制文本”。解析器同时兼容 Base64 和明文 JSON。文件记录通常使用毫秒时间戳，文件夹记录可能使用 ISO 日期字符串，插件会统一转换后排序。
+目前确认`history.data`的数据格式是“UTF-8 JSON 转十六进制文本”。解析器同时兼容 Base64 和明文 JSON。文件记录通常使用毫秒时间戳，文件夹记录可能使用 ISO 日期字符串，插件会统一转换后排序。
 
 ## 插件如何启动 Typora
 

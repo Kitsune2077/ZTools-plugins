@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/@ztools-center/ztools-api-types/resource/ztools.schema.json",
   "name": "recent-typora",
-  "title": "Typora",
+  "title": "Recent Typora",
   "description": "按最近打开顺序列出 Typora 的文件和文件夹",
   "author": "轩辕真人",
   "version": "1.0.0",
