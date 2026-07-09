@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   fetchRealtimeGoldPrice,
   fetchCurrentGoldUSD,
@@ -73,6 +73,15 @@ export default function GoldPrice() {
   const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
   const [selectedYear2, setSelectedYear2] = useState(now.getFullYear());
 
+  // 本地月度快照 (从 storage 读取，传给 buildYearlyData 以消除 useMemo 副作用)
+  const [localMonthly, setLocalMonthly] = useState<MonthlySnapshot[]>([]);
+
+  // 并发锁: 防止多个 loadData 同时执行
+  const loadingRef = useRef(false);
+
+  // 用于取消上一次未完成的请求
+  const abortRef = useRef<AbortController | null>(null);
+
   // 可用选项 (基于 monthly CSV + 本地每日快照)
   const monthlyLegacy = legacyData?.monthly ?? [];
   const availableYears = useMemo(
@@ -93,6 +102,16 @@ export default function GoldPrice() {
 
   // ====== 加载数据 ======
   const loadData = useCallback(async (forceRefresh = false) => {
+    // 并发锁: 如果上一次加载还没完成，取消它
+    if (loadingRef.current) {
+      abortRef.current?.abort();
+    }
+    loadingRef.current = true;
+
+    // 创建新的 AbortController
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     if (forceRefresh) clearCache();
     setError(null);
 
@@ -100,18 +119,24 @@ export default function GoldPrice() {
       // 并行请求: Tmini(RMB) + 实时USD + 遗留月/年历史（每个独立容错）
       const [tminiData, usdSpot, legacy] = await Promise.all([
         fetchRealtimeGoldPrice().catch((err) => {
+          if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
           console.error('获取RMB金价失败:', err);
           return null;
         }),
         fetchCurrentGoldUSD().catch((err) => {
+          if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
           console.error('获取USD金价失败:', err);
           return null;
         }),
         fetchLegacyHistoricalData().catch((err) => {
+          if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
           console.error('获取遗留历史数据失败:', err);
           return null;
         }),
       ]);
+
+      // 如果请求被取消，静默退出
+      if (controller.signal.aborted) return;
 
       if (!tminiData && !usdSpot) {
         throw new Error('金价数据获取失败，请检查网络连接');
@@ -130,7 +155,7 @@ export default function GoldPrice() {
       if (usdSpot) {
         setSpotUSD(usdSpot.price);
 
-        // 追加本地快照（用USD价格）
+        // 追加本地快照（用USD价格，内部已做去重和频率控制）
         const usdPrice = usdSpot.price;
         appendHourlySnapshot(usdPrice);
         appendDailySnapshot(usdPrice);
@@ -146,6 +171,9 @@ export default function GoldPrice() {
       const daily = getDailySnapshots();
       setHistorical(daily);
 
+      // 本地月度快照 (从 storage 读取，供 buildYearlyData 使用，消除 useMemo 副作用)
+      setLocalMonthly(getMonthlySnapshots());
+
       setLastUpdate(new Date().toLocaleTimeString('zh-CN'));
       setLoading(false);
 
@@ -155,10 +183,15 @@ export default function GoldPrice() {
         `遗留 ${legacy?.monthly.length ?? 0} 月 / ${legacy?.annual.length ?? 0} 年`
       );
     } catch (err) {
+      // AbortError 是正常的取消，不报错
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+
       const msg = err instanceof Error ? err.message : '加载失败';
       console.error('[金价]', msg);
       setError(msg);
       setLoading(false);
+    } finally {
+      loadingRef.current = false;
     }
   }, []);
 
@@ -174,6 +207,13 @@ export default function GoldPrice() {
   // ZTools 高度
   useEffect(() => {
     if (isZTools) (window as any).ztools.setExpendHeight?.(620);
+  }, []);
+
+  // 组件卸载时取消所有在途请求
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
   }, []);
 
   // ====== 派生数据 ======
@@ -206,8 +246,8 @@ export default function GoldPrice() {
 
   /** 年度：指定年份12个月数据 (monthly CSV + 本地快照) */
   const yearData: MonthlySnapshot[] = useMemo(
-    () => buildYearlyData(selectedYear2, monthlyLegacy, historical),
-    [monthlyLegacy, historical, selectedYear2, lastUpdate],
+    () => buildYearlyData(selectedYear2, monthlyLegacy, historical, localMonthly),
+    [monthlyLegacy, historical, selectedYear2, localMonthly],
   );
 
   /** 历年对比 (最近10年) */
