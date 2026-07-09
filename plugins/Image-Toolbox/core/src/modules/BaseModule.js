@@ -75,11 +75,31 @@ class BaseModule {
       const saved = this._savedInteractivity.get(obj);
       if (saved) {
         obj.set({ selectable: saved.selectable, evented: saved.evented });
-      } else {
-        obj.set({ selectable: true, evented: true });
       }
+      // 不在保存映射中的对象（如工具激活期间新增的图层）保持原样，
+      // 不做任何修改，避免错误地解锁被用户主动锁定的图层
     });
     this._savedInteractivity.clear();
+  }
+
+  /**
+   * 启用可编辑图层的交互性，保留用户主动锁定的图层和临时辅助对象状态。
+   */
+  _enableEditableLayerInteractivity() {
+    const canvas = this.canvasManager.canvas;
+    if (!canvas) return;
+
+    const layerManager = this.canvasManager.layerManager;
+    const objects = canvas.getObjects();
+    objects.forEach(obj => {
+      if (obj.excludeFromLayer || obj.excludeFromHistory) return;
+
+      const meta = layerManager?.getLayerByObject?.(obj) || null;
+      const locked = meta ? meta.locked : obj._layerLocked === true;
+      if (locked && !meta?.isBackground && obj !== this.canvasManager.originalImage && !obj._originalImage) return;
+
+      obj.set({ selectable: true, evented: true });
+    });
   }
 
   /**

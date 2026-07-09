@@ -1,4 +1,5 @@
-﻿import BaseModule from './BaseModule.js';
+import BaseModule from './BaseModule.js';
+import eventBus from '../EventBus.js';
 import { requestRender as _requestRender } from '../utils/helpers.js';
 
 /**
@@ -15,8 +16,8 @@ class SelectModule extends BaseModule {
     canvas.selection = true;
     canvas.defaultCursor = 'default';
 
-    // 恢复所有对象的交互性，确保属性面板可以编辑（而非只读）
-    this._restoreObjectsInteractivity();
+    // 启用未锁定图层的交互性，确保新建图层切回移动/框选后可选中。
+    this._enableEditableLayerInteractivity();
   }
 
   deactivate() {
@@ -121,12 +122,15 @@ class SelectModule extends BaseModule {
     const canvas = this.canvasManager.canvas;
     const active = canvas?.getActiveObject();
     if (!active) return [];
+    const originalImage = this.canvasManager.originalImage;
 
     if (active.type === 'activeSelection' && typeof active.getObjects === 'function') {
-      return active.getObjects().filter(obj => !obj.excludeFromHistory);
+      // 多选时排除背景，避免框选覆盖层时误带上整张底图；单独选中背景仍可变换。
+      return active.getObjects().filter(obj => !obj.excludeFromHistory && obj !== originalImage);
     }
 
-    return active.excludeFromHistory ? [] : [active];
+    if (active.excludeFromHistory) return [];
+    return [active];
   }
 
   _getCommonAngle(targets) {

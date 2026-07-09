@@ -68,6 +68,15 @@ class PropertyPanel {
     const module = this._tm.getCurrentModule();
     const active = this._getActiveObject();
 
+    // 模块可声明 overridePropertyPanel 接管属性面板（即使有选中对象）
+    if (module?.overridePropertyPanel && typeof module.getPropertyPanelHTML === 'function') {
+      const html = module.getPropertyPanelHTML();
+      if (html) {
+        bodyEl.innerHTML = html;
+        return;
+      }
+    }
+
     if (active?.excludeFromProperty && module && typeof module.getPropertyPanelHTML === 'function') {
       const html = module.getPropertyPanelHTML();
       if (html) {
@@ -103,7 +112,8 @@ class PropertyPanel {
     const isText = this._isTextObject(active);
     const isBackground = !!meta?.isBackground;
     const locked = meta ? meta.locked : (active.selectable === false && active.evented === false);
-    const editDisabled = (isBackground || locked) ? ' disabled' : '';
+    // 背景图层的锁定只限制删除、改名和排序，仍允许显式编辑几何参数。
+    const editDisabled = (locked && !isBackground) ? ' disabled' : '';
     const renameDisabled = (!meta || isBackground) ? ' disabled' : '';
     const lockDisabled = isBackground ? ' disabled' : '';
     const opacity = active.opacity == null ? 1 : active.opacity;
@@ -171,7 +181,7 @@ class PropertyPanel {
     html += `
       <div class="property-item">
         <label>不透明</label>
-        <input type="range" class="property-range" data-prop="opacity" 
+        <input type="range" class="property-range" data-prop="opacity"
                min="0" max="100" value="${Math.round(opacity * 100)}"${editDisabled} />
         <span class="property-value">${Math.round(opacity * 100)}%</span>
       </div>
@@ -283,6 +293,7 @@ class PropertyPanel {
     const moduleAction = target.dataset.moduleAction;
     const modulePreset = target.dataset.modulePreset;
     if (!prop && !moduleProp && !moduleAction && !modulePreset) return;
+    // 普通属性控件只在 input/change 事件中处理；click 事件仅放行模块动作/预设
     if (e.type === 'click' && !moduleAction && !modulePreset) return;
 
     const module = this._tm.getCurrentModule();
@@ -433,7 +444,8 @@ class PropertyPanel {
     const handled = module.onToolPropertyChange(prop, value, { eventType: e.type });
 
     if (target.type === 'range' && target.nextElementSibling) {
-      target.nextElementSibling.textContent = `${value}${target.dataset.valueSuffix || 'px'}`;
+      const suffix = target.dataset.valueSuffix != null ? target.dataset.valueSuffix : 'px';
+      target.nextElementSibling.textContent = `${value}${suffix}`;
     }
 
     if (handled !== false && target.dataset.refreshProperty === 'true') {

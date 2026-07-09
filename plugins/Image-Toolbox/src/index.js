@@ -22,7 +22,7 @@ import AccountPage, {
   EDITOR_SIDE_PANEL_POSITION_KEY,
   EDITOR_SIDE_PANEL_POSITIONS,
 } from './ui/AccountPage.js';
-import ZtoolsHostAdapter from './adapters/host/ZtoolsHostAdapter.js';
+import UtoolsHostAdapter from './adapters/host/UtoolsHostAdapter.js';
 import { initTheme } from '../core/src/utils/theme.js';
 
 // ═══════════════════════════════════════
@@ -81,7 +81,7 @@ class App {
       this.historyManager = new HistoryManager(this.canvasManager, 30);
 
       // 4. 初始化工具管理器（注入 host adapter）
-      this.hostAdapter = new ZtoolsHostAdapter();
+      this.hostAdapter = new UtoolsHostAdapter();
       this.toolManager = new ToolManager(this.canvasManager, this.historyManager, {
         host: this.hostAdapter,
       });
@@ -306,6 +306,16 @@ class App {
 
       // 工具快捷键
       if (!e.ctrlKey && !e.metaKey) {
+        // 检查焦点是否在 HTML 表单元素上（输入框、下拉框等）
+        const activeElement = document.activeElement;
+        const tagName = activeElement?.tagName?.toUpperCase();
+        if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return;
+        if (activeElement?.isContentEditable) return;
+        
+        // Fabric.js 文字编辑状态下也不触发
+        const active = this.canvasManager?.getActiveObject();
+        if (active && active.isEditing) return;
+        
         const tools = this.toolManager?.getTools() || [];
         const tool = tools.find(t => t.shortcut === e.key.toUpperCase());
         if (tool) {
