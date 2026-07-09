@@ -76,10 +76,7 @@ export default function GoldPrice() {
   // 本地月度快照 (从 storage 读取，传给 buildYearlyData 以消除 useMemo 副作用)
   const [localMonthly, setLocalMonthly] = useState<MonthlySnapshot[]>([]);
 
-  // 并发锁: 防止多个 loadData 同时执行
-  const loadingRef = useRef(false);
-
-  // 用于取消上一次未完成的请求
+  // 用于取消上一次未完成的请求并作为并发锁
   const abortRef = useRef<AbortController | null>(null);
 
   // 可用选项 (基于 monthly CSV + 本地每日快照)
@@ -102,11 +99,10 @@ export default function GoldPrice() {
 
   // ====== 加载数据 ======
   const loadData = useCallback(async (forceRefresh = false) => {
-    // 并发锁: 如果上一次加载还没完成，取消它
-    if (loadingRef.current) {
-      abortRef.current?.abort();
+    // 如果上一次加载还没完成，取消它
+    if (abortRef.current) {
+      abortRef.current.abort();
     }
-    loadingRef.current = true;
 
     // 创建新的 AbortController
     const controller = new AbortController();
@@ -191,7 +187,9 @@ export default function GoldPrice() {
       setError(msg);
       setLoading(false);
     } finally {
-      loadingRef.current = false;
+      if (abortRef.current === controller) {
+        abortRef.current = null;
+      }
     }
   }, []);
 

@@ -400,8 +400,7 @@ export function updateMonthlySnapshot(price: number): void {
     const count = Math.min(snap.count || 1, 10_000);
     const newAvg = (snap.avgPrice * count + price) / (count + 1);
     // 高低价和均价都没变化，跳过
-    if (newHigh === oldHigh && newLow === oldLow &&
-        Math.abs(newAvg - snap.avgPrice) < 0.01) return;
+    if (newHigh === oldHigh && newLow === oldLow && newAvg === snap.avgPrice) return;
     snap.highPrice = newHigh;
     snap.lowPrice  = newLow;
     snap.avgPrice  = newAvg;
