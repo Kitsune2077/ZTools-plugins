@@ -196,17 +196,47 @@ function persist(key: string, value: unknown): void {
     } else {
       mem.set(key, value);
     }
-  } catch { /* ignore */ }
+  } catch (e) {
+    console.warn(`[金价] persist 失败 (${key}):`, e);
+  }
 }
 
 function load<T>(key: string, fallback: T): T {
   try {
     if (isZTools) {
       const raw = db()?.getItem(key);
-      return raw ? JSON.parse(raw) as T : fallback;
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw) as T;
+      // 校验数据为数组（快照数据都应是数组）
+      if (Array.isArray(parsed)) return parsed;
+      console.warn(`[金价] load 数据异常 (${key}), 已重置`);
+      return fallback;
     }
-    return (mem.get(key) as T) ?? fallback;
-  } catch { return fallback; }
+    const val = mem.get(key);
+    return (Array.isArray(val) ? val : fallback) as T;
+  } catch (e) {
+    console.warn(`[金价] load 失败 (${key}), 已重置:`, e);
+    return fallback;
+  }
+}
+
+// ---- 写入频率控制 ----
+
+/** 同一条 key 的最小写入间隔 (ms)，防止短时间高频写入 */
+const MIN_PERSIST_INTERVAL = 60_000; // 1 分钟
+
+const _lastPersistTime: Record<string, number> = {};
+
+/** 检查是否距离上次 persist 已超过最小间隔 */
+function shouldPersist(key: string): boolean {
+  const last = _lastPersistTime[key] || 0;
+  return Date.now() - last >= MIN_PERSIST_INTERVAL;
+}
+
+/** 带频率控制的 persist */
+function persistThrottled(key: string, value: unknown): void {
+  _lastPersistTime[key] = Date.now();
+  persist(key, value);
 }
 
 // ---- CSV 解析 ----
@@ -311,34 +341,42 @@ export async function fetchRealtimeGoldPrice(): Promise<TminiResponse> {
 /** 追加小时快照 (日内波动用) — 每小时调用一次 */
 export function appendHourlySnapshot(price: number): void {
   const now = new Date();
-  // 取整到小时: 2026-07-01T14:00
   const hour = `${now.toISOString().slice(0, 13)}:00`;
 
+  // 频率控制: 同一小时内不需要每 5 分钟写一次
+  if (!shouldPersist(KEY_HOURLY)) return;
+
   const list = load<HourlySnapshot[]>(KEY_HOURLY, []);
-  // 去重: 同一小时已有记录则更新
   const idx = list.findIndex(x => x.time === hour);
   if (idx >= 0) {
+    // 同一小时价格没变化，不写
+    if (list[idx].price === price) return;
     list[idx].price = price;
   } else {
     list.push({ time: hour, price });
   }
-  // 保留近 48 小时
   const trimmed = list.slice(-48);
-  persist(KEY_HOURLY, trimmed);
+  persistThrottled(KEY_HOURLY, trimmed);
 }
 
 /** 追加每日快照 (月度/年度波动用) — 每天调用一次 */
 export function appendDailySnapshot(price: number): void {
   const today = new Date().toISOString().slice(0, 10);
+
+  // 频率控制: 同一天不需要每 5 分钟写一次
+  if (!shouldPersist(KEY_DAILY)) return;
+
   const list = load<HistoricalPrice[]>(KEY_DAILY, []);
   const idx = list.findIndex(x => x.date === today);
   if (idx >= 0) {
+    // 同日价格没变化，不写
+    if (list[idx].price === price) return;
     list[idx].price = price;
   } else {
     list.push({ date: today, price, source: 'local-daily' });
   }
   const trimmed = list.slice(-400);
-  persist(KEY_DAILY, trimmed);
+  persistThrottled(KEY_DAILY, trimmed);
 }
 
 /** 更新月度快照 — 每次加载时刷新当月数据 */
@@ -346,23 +384,32 @@ export function updateMonthlySnapshot(price: number): void {
   const now = new Date();
   const month = now.toISOString().slice(0, 7); // YYYY-MM
 
+  // 频率控制: 同一个月不需要每 5 分钟写一次
+  if (!shouldPersist(KEY_MONTHLY)) return;
+
   const list = load<MonthlySnapshot[]>(KEY_MONTHLY, []);
   const idx = list.findIndex(x => x.month === month);
 
   if (idx >= 0) {
-    // 用新价格更新当月高低均
     const snap = list[idx];
-    const count = snap.count || 1;
-    snap.highPrice = Math.max(snap.highPrice, price);
-    snap.lowPrice  = Math.min(snap.lowPrice, price);
-    // 正确的运行均值: (旧均值 × 次数 + 新值) / (次数 + 1)
-    snap.avgPrice = (snap.avgPrice * count + price) / (count + 1);
-    snap.count = count + 1;
+    const oldHigh = snap.highPrice;
+    const oldLow  = snap.lowPrice;
+    const newHigh = Math.max(snap.highPrice, price);
+    const newLow  = Math.min(snap.lowPrice, price);
+    // count 上限防护: 超过 10000 截断，防止无限增长
+    const count = Math.min(snap.count || 1, 10_000);
+    const newAvg = (snap.avgPrice * count + price) / (count + 1);
+    // 高低价和均价都没变化，跳过
+    if (newHigh === oldHigh && newLow === oldLow && newAvg === snap.avgPrice) return;
+    snap.highPrice = newHigh;
+    snap.lowPrice  = newLow;
+    snap.avgPrice  = newAvg;
+    snap.count     = count + 1;
   } else {
     list.push({ month, avgPrice: price, highPrice: price, lowPrice: price, count: 1 });
   }
   const trimmed = list.slice(-60);
-  persist(KEY_MONTHLY, trimmed);
+  persistThrottled(KEY_MONTHLY, trimmed);
 }
 
 // ---- 读取快照 ----
@@ -436,7 +483,7 @@ export function getRecentDailyData(data: HistoricalPrice[], days: number) {
 
 /**
  * 构建年度月线数据:
- *   1. 优先用本地 MonthlySnapshot (本年月度高/低更精确)
+ *   1. 优先用 localMonthly (本月度高/低更精确, 由调用方预先读取)
  *   2. 从 monthly CSV 月均价补充历史月份
  *   3. 降级: 从 historicalData (本地每日快照) 聚合
  */
@@ -444,8 +491,8 @@ export function buildYearlyData(
   year: number,
   monthlyData: MonthlyGoldRecord[],
   dailyData: HistoricalPrice[],
+  localMonthly: MonthlySnapshot[] = [],
 ): MonthlySnapshot[] {
-  const localMonthly = getMonthlySnapshots();
   const result: MonthlySnapshot[] = [];
 
   for (let m = 1; m <= 12; m++) {
@@ -609,4 +656,6 @@ export function clearAllSnapshots(): void {
   } else {
     for (const k of keys) mem.delete(k);
   }
+  // 重置写入频率计时器
+  for (const k of keys) delete _lastPersistTime[k];
 }
