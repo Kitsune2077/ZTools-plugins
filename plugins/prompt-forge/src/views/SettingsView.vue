@@ -23,7 +23,9 @@ function importJson(e: Event) {
     try {
       const data = JSON.parse(reader.result as string); if (!Array.isArray(data)) { alert('格式不正确'); return }
       await promptStore.ensureReady(); let count = 0
-      for (const item of data) { if (item.id && item.title && item.content && !promptStore.rawItems.value.some(i => i.id === item.id)) { promptStore.addItem(item); count++ } }
+      let changed = false
+      for (const item of data) { if (item.id && item.title && item.content && !promptStore.rawItems.value.some(i => i.id === item.id)) { promptStore.rawItems.value.push(item); count++; changed = true } }
+      if (changed) await promptStore.persistAll()
       alert(`✓ 导入 ${count} 条`)
     } catch { alert('导入失败') }
   }

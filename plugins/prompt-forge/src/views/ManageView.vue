@@ -83,9 +83,35 @@ function selectAll() {
 function batchDelete() {
   if (!selectedIds.value.size) return
   if (!confirm(`确定删除选中的 ${selectedIds.value.size} 项？`)) return
-  selectedIds.value.forEach(id => prompt.softDelete(id))
+  let changed = false
+  const now = Date.now()
+  prompt.rawItems.value.forEach(item => {
+    if (selectedIds.value.has(item.id)) {
+      item.deleted = true
+      item.updatedAt = now
+      changed = true
+    }
+  })
+  if (changed) prompt.persistAll()
   selectedIds.value = new Set()
   showNotification('✓ 已删除')
+}
+
+function batchMoveProject(e: Event) {
+  const v = (e.target as HTMLSelectElement).value
+  if (!v) return
+  let changed = false
+  const now = Date.now()
+  prompt.rawItems.value.forEach(item => {
+    if (selectedIds.value.has(item.id)) {
+      item.projectId = v
+      item.updatedAt = now
+      changed = true
+    }
+  })
+  if (changed) prompt.persistAll()
+  ;(e.target as HTMLSelectElement).value = ''
+  showNotification('✓ 已移入项目')
 }
 
 function selectItem(id: string) {
@@ -116,12 +142,16 @@ async function saveEdit() {
   for (const v of editVars.value) { if (!seen.has(v.name)) { vars.push({ ...v }); seen.add(v.name) } }
   const newVersion = bodyChanged ? (u.version || 1) + 1 : (u.version || 1)
   const now = Date.now()
-  if (bodyChanged && u.snapshots) u.snapshots.push({ version: u.version || 1, body: u.content, note: `编辑 V${newVersion}`, createdAt: now })
+  const snapshots = u.snapshots ? [...u.snapshots] : []
+  if (bodyChanged) {
+    snapshots.push({ version: u.version || 1, body: u.content, note: `编辑 V${newVersion}`, createdAt: now })
+  }
   prompt.updateItem(u.id, {
     title: editTitle.value.trim() || u.title,
     content: editBody.value, tags: editTags.value, variables: vars,
     type: editType.value, projectId: editProjectId.value || undefined,
     version: newVersion,
+    snapshots,
   })
   showNotification('✓ 保存成功')
 }
@@ -175,7 +205,7 @@ onMounted(() => {
       <div v-if="selectMode && selectedIds.size > 0" class="m-batch-bar">
         <span class="batch-info">已选 {{ selectedIds.size }} 项</span>
         <button class="btn btn-xs" @click="selectAll">全选</button>
-        <select class="batch-project" @change="(e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v) { selectedIds.forEach(id => prompt.updateItem(id, { projectId: v })); showNotification('✓ 已移入项目') } (e.target as HTMLSelectElement).value = '' }">
+        <select class="batch-project" @change="batchMoveProject">
           <option value="">移入项目…</option>
           <option v-for="p in projectStore.items.value" :key="p.id" :value="p.id">{{ p.name }}</option>
         </select>

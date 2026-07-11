@@ -40,12 +40,16 @@ function closeCtxMenu() {
 }
 
 function deleteProject(p: Project) {
-  // 将项目下的提示词取消项目关联
-  prompt.liveItems.value.forEach(item => {
+  // 批量取消项目关联，仅触发一次持久化
+  let changed = false
+  prompt.rawItems.value.forEach(item => {
     if (item.projectId === p.id) {
-      prompt.updateItem(item.id, { projectId: undefined })
+      item.projectId = undefined
+      item.updatedAt = Date.now()
+      changed = true
     }
   })
+  if (changed) prompt.persistAll()
   projectStore.removeProject(p.id)
   if (prompt.filterProjectId.value === p.id) prompt.filterProjectId.value = ''
   showNotification(`已删除项目「${p.name}」`)

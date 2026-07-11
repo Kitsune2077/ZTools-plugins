@@ -25,19 +25,6 @@ export function renderVariables(text: string, values: Record<string, string>): s
   })
 }
 
-/** FNV-1a 哈希 */
-export function fnvHash(str: string): string {
-  const data = new TextEncoder().encode(str)
-  let hash = BigInt('0xcbf29ce484222325')
-  const prime = BigInt('0x100000001b3')
-  const mask = BigInt('0xffffffffffffffff')
-  for (const byte of data) {
-    hash ^= BigInt(byte)
-    hash = (hash * prime) & mask
-  }
-  return hash.toString(16).padStart(16, '0').slice(0, 16)
-}
-
 /** 二元组相似度 */
 function bigramSimilarity(a: string, b: string): number {
   const getBigrams = (s: string) => {
@@ -78,8 +65,7 @@ export async function detectDuplicate(
   newContent: string,
   newId: string
 ): Promise<{ phase: 'normal' | 'exact' | 'similar'; exactId?: string; similarItems: Array<{ id: string; score: number }> }> {
-  const newHash = fnvHash(newContent)
-  const exact = existing.find(e => e.id !== newId && (e as any).hash === newHash)
+  const exact = existing.find(e => e.id !== newId && e.content === newContent)
   if (exact) return { phase: 'exact', exactId: exact.id, similarItems: [] }
   const similar: Array<{ id: string; score: number }> = []
   for (const item of existing) {
