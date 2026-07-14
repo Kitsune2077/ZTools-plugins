@@ -15,11 +15,15 @@
 * **排序不生效修复** — `sortBy`/`sortDir` 等筛选状态定义在 `usePromptStore()` 函数内部，每次调用创建新 ref，导致 PromptList 与 SpaceView 使用不同实例。将所有筛选/排序状态提升到模块级别，确保全局共享
 * **autoFocus 设置未生效** — `appSettings.autoFocus` 定义了但 SpaceView 搜索框 focus 是硬编码的 `setTimeout`，现已读取设置值
 * **版本恢复语义修复** — 恢复快照时复用 `saveEdit()` 导致备注为「编辑 V4」语义不清，改为独立保存逻辑，备注为「保存于恢复前」/「编辑前保存」；版本 tab 新增当前版本卡片
+* **版本恢复幽灵变量** — 恢复快照时保留了旧模板中存在但新模板中不存在的变量，导致 UI 显示无用输入框。改为只提取新模板实际包含的变量
+* **历史记录变量污染** — 保存历史时解构整个 `variableValues` 可能包含其他提示词残留的变量值，改为只过滤当前提示词实际声明的变量
+* **历史查看按钮空值保护** — 原始提示词被硬删除后「查看」按钮自动禁用，避免导航到空管理页面
 
 ### ♻️ Refactor
 
 * **平台 API 类型声明** — 新建 `src/types/ztools.d.ts`，`platform.ts` 和 `storage.ts` 中 `window as any` 替换为类型安全访问
 * **存储错误处理统一** — `storage.ts` 所有 `catch` 块统一添加 `console.error` 日志，`save` 函数补全 `try-catch`
+* **ManageView 搜索性能优化** — `filteredItems` 拆分为 `baseItems` + `fuseInstance` + `filteredItems` 三层计算属性，Fuse 索引仅在基础列表变化时重建，避免每次按键重新实例化
 
 ## \[1.0.0] - 2026-07-11
 

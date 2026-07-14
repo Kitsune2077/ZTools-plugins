@@ -126,7 +126,14 @@ async function handleCopy() {
       promptId: unit.id,
       promptTitle: unit.title,
       copiedContent: text,
-      variableValues: unit.variables?.length ? { ...prompt.variableValues.value } : undefined,
+      variableValues: unit.variables?.length
+        ? unit.variables.reduce((acc, v) => {
+            if (prompt.variableValues.value[v.name] !== undefined) {
+              acc[v.name] = prompt.variableValues.value[v.name]
+            }
+            return acc
+          }, {} as Record<string, string>)
+        : undefined,
     })
     if (appSettings.settings.value.closeAfterCopy) hideMainWindow()
     prompt.resetSelection()
@@ -327,7 +334,7 @@ onUnmounted(() => {
                 </div>
               </div>
               <div class="history-item-actions">
-                <button class="btn" @click="router.navigateToManage(h.promptId)" title="查看原始提示词">查看</button>
+                <button class="btn" :disabled="!prompt.liveItems.value.some(i => i.id === h.promptId)" @click="router.navigateToManage(h.promptId)" title="查看原始提示词">查看</button>
                 <button class="btn" @click="copyText(h.copiedContent); showNotification('✓ 已复制')">复制</button>
                 <button class="btn icon-btn" title="删除" @click="prompt.deleteHistoryEntry(h.id)">✕</button>
               </div>
