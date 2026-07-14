@@ -7,6 +7,8 @@ defineProps<{
   items: PromptItem[]
   activeIndex: number
   selectedId?: string
+  emptyTitle?: string
+  emptyDesc?: string
 }>()
 
 const emit = defineEmits<{
@@ -80,7 +82,7 @@ const sortIcon = computed(() => prompt.sortDir.value === 'desc' ? '↓' : '↑')
     <div v-if="items.length > 0" class="sort-bar">
       <span class="sort-label">排序</span>
       <button
-        v-for="opt in [{v:'createdAt',l:'创建'},{v:'updatedAt',l:'更新'},{v:'usageCount',l:'使用'}] as const"
+        v-for="opt in [{v:'createdAt',l:'创建'},{v:'updatedAt',l:'更新'},{v:'title',l:'名称'},{v:'usageCount',l:'使用'}] as const"
         :key="opt.v"
         :class="['sort-btn', { active: prompt.sortBy.value === opt.v }]"
         @click="toggleSort(opt.v)"
@@ -121,9 +123,9 @@ const sortIcon = computed(() => prompt.sortDir.value === 'desc' ? '↓' : '↑')
           <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
         </svg>
       </div>
-      <p class="empty-title">没有找到提示词</p>
-      <p class="empty-desc">{{ prompt.query.value.trim() ? '试试其他关键词' : '点击右上角 + 创建第一个' }}</p>
-      <button v-if="!prompt.query.value.trim()" class="btn primary" @click="emit('enterWizard')">
+      <p class="empty-title">{{ emptyTitle || '没有找到提示词' }}</p>
+      <p class="empty-desc">{{ emptyDesc || (prompt.query.value.trim() ? '试试其他关键词' : '点击右上角 + 创建第一个') }}</p>
+      <button v-if="!prompt.query.value.trim() && !emptyDesc" class="btn primary" @click="emit('enterWizard')">
         <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round">
           <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
         </svg>

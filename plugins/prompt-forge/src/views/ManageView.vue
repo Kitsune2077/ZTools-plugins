@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
+import Fuse from 'fuse.js'
 import { useRouter } from '../stores/router'
 import { usePromptStore } from '../stores/prompt'
 import { useProjectStore } from '../stores/project'
@@ -41,13 +42,17 @@ const filteredItems = computed(() => {
   // 归属筛选
   if (filterScope.value === 'project') items = items.filter(i => i.projectId)
   else if (filterScope.value === 'asset') items = items.filter(i => !i.projectId)
-  // 搜索
-  const q = prompt.query.value.trim().toLowerCase()
-  if (q) items = items.filter(i =>
-    i.title.toLowerCase().includes(q) ||
-    i.content?.toLowerCase().includes(q) ||
-    i.tags.some(t => t.toLowerCase().includes(q))
-  )
+  // Fuse.js 模糊搜索
+  const q = prompt.query.value.trim()
+  if (q) {
+    const fuse = new Fuse(items, {
+      keys: ['title', 'content', 'tags'],
+      threshold: 0.4,
+      ignoreLocation: true,
+      minMatchCharLength: 1,
+    })
+    items = fuse.search(q).map(r => r.item)
+  }
   return items
 })
 
@@ -122,10 +127,37 @@ function formatTime(ts: number) { return new Date(ts).toLocaleString('zh-CN') }
 
 function restoreSnapshot(snap: { version: number; body: string }) {
   if (!selectedUnit.value) return
-  if (!confirm(`恢复到 v${snap.version}？`)) return
+  if (!confirm(`恢复到 v${snap.version} 的内容？`)) return
+  const u = selectedUnit.value
+  const now = Date.now()
+  const snapshots = u.snapshots ? [...u.snapshots] : []
+  // 先把当前版本存为快照，这样恢复后还能找回
+  snapshots.push({
+    version: u.version || 1,
+    body: u.content,
+    note: `保存于恢复前`,
+    createdAt: now,
+  })
+  // 从快照内容重新提取变量
+  const detected = extractVariables(snap.body)
+  const seen = new Set<string>()
+  const vars: Variable[] = []
+  for (const d of detected) {
+    const existing = u.variables?.find(v => v.name === d.name)
+    vars.push({ name: d.name, required: existing?.required ?? d.required, defaultValue: existing?.defaultValue ?? d.defaultValue })
+    seen.add(d.name)
+  }
+  if (u.variables) for (const v of u.variables) { if (!seen.has(v.name)) { vars.push({ ...v }); seen.add(v.name) } }
+  const newVersion = (u.version || 1) + 1
+  prompt.updateItem(u.id, {
+    content: snap.body,
+    variables: vars,
+    version: newVersion,
+    snapshots,
+  })
   editBody.value = snap.body
-  saveEdit()
-  showNotification(`✓ 已恢复到 v${snap.version}`)
+  editVars.value = vars
+  showNotification(`✓ 已恢复 v${snap.version} 的内容 → 当前 v${newVersion}`)
 }
 
 async function saveEdit() {
@@ -144,7 +176,12 @@ async function saveEdit() {
   const now = Date.now()
   const snapshots = u.snapshots ? [...u.snapshots] : []
   if (bodyChanged) {
-    snapshots.push({ version: u.version || 1, body: u.content, note: `编辑 V${newVersion}`, createdAt: now })
+    snapshots.push({
+      version: u.version || 1,
+      body: u.content,
+      note: `编辑前保存`,
+      createdAt: now,
+    })
   }
   prompt.updateItem(u.id, {
     title: editTitle.value.trim() || u.title,
@@ -294,7 +331,17 @@ onMounted(() => {
 
         <!-- 版本 -->
         <template v-else-if="editTab === 'versions'">
+          <!-- 当前版本 -->
+          <div class="version-item current">
+            <div class="vi-head">
+              <span class="vi-ver">v{{ selectedUnit.version || 1 }}</span>
+              <span class="vi-note">当前版本</span>
+            </div>
+            <div class="vi-body">{{ (selectedUnit.content || '').slice(0, 200) }}{{ (selectedUnit.content || '').length > 200 ? '…' : '' }}</div>
+          </div>
+          <!-- 历史快照 -->
           <div v-if="selectedUnit.snapshots && selectedUnit.snapshots.length" class="version-list">
+            <div class="version-divider">历史版本（{{ selectedUnit.snapshots.length }}）</div>
             <div v-for="(snap, i) in [...selectedUnit.snapshots].reverse()" :key="i" class="version-item">
               <div class="vi-head">
                 <span class="vi-ver">v{{ snap.version }}</span>
@@ -410,6 +457,8 @@ onMounted(() => {
 
 .version-list { display: flex; flex-direction: column; gap: 10px; }
 .version-item { border: 1px solid var(--pf-border); border-radius: var(--pf-radius-sm); padding: 12px; background: var(--pf-bg-elevated); }
+.version-item.current { border-color: var(--pf-accent); background: var(--pf-accent-soft); }
+.version-divider { font-size: 11px; font-weight: 700; color: var(--pf-text-faint); text-transform: uppercase; letter-spacing: 0.06em; padding: 8px 0 2px; }
 .vi-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .vi-ver { font-family: var(--pf-font-mono); font-size: 12px; font-weight: 700; color: var(--pf-accent); background: var(--pf-accent-soft); padding: 2px 8px; border-radius: var(--pf-radius-xs); }
 .vi-note { font-size: 12px; color: var(--pf-text-secondary); flex: 1; }

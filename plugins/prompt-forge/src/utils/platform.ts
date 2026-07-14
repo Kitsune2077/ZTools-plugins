@@ -1,6 +1,6 @@
 /** 复制文本到剪贴板 */
 export async function copyText(text: string): Promise<void> {
-  const ztools = (window as any).ztools
+  const ztools = window.ztools
   if (ztools?.copyText) {
     ztools.copyText(text)
     return
@@ -14,7 +14,7 @@ export async function copyText(text: string): Promise<void> {
 
 /** 从剪贴板读取文本 */
 export async function readClipboardText(): Promise<string> {
-  const ztools = (window as any).ztools
+  const ztools = window.ztools
   // ZTools 剪贴板 API：取最新一条文本记录
   if (ztools?.clipboard?.getHistory) {
     try {
@@ -33,7 +33,7 @@ export async function readClipboardText(): Promise<string> {
 
 /** 显示通知 */
 export function showNotification(message: string) {
-  const ztools = (window as any).ztools
+  const ztools = window.ztools
   if (ztools?.showNotification) {
     ztools.showNotification(message)
   }
@@ -41,7 +41,7 @@ export function showNotification(message: string) {
 
 /** 延迟隐藏主窗口 */
 export function hideMainWindow(delay = 200) {
-  const ztools = (window as any).ztools
+  const ztools = window.ztools
   if (!ztools?.hideMainWindow) return
   setTimeout(() => {
     ztools.hideMainWindow()
@@ -50,7 +50,7 @@ export function hideMainWindow(delay = 200) {
 
 /** 退出插件 */
 export async function outPlugin() {
-  const ztools = (window as any).ztools
+  const ztools = window.ztools
   if (ztools?.outPlugin) {
     await ztools.outPlugin()
   }
@@ -58,7 +58,7 @@ export async function outPlugin() {
 
 /** 在资源管理器中显示文件 */
 export function showInFolder(path: string) {
-  const ztools = (window as any).ztools
+  const ztools = window.ztools
   if (ztools?.shellShowItemInFolder) {
     ztools.shellShowItemInFolder(path)
   }
