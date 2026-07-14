@@ -35,25 +35,25 @@ const viewingSnapshot = ref<number | null>(null)
 
 const selectedUnit = computed(() => prompt.rawItems.value.find(i => i.id === selectedId.value) || null)
 
-const filteredItems = computed(() => {
+const baseItems = computed(() => {
   let items = prompt.liveItems.value
-  // 类型筛选
   if (filterType.value) items = items.filter(i => i.type === filterType.value)
-  // 归属筛选
   if (filterScope.value === 'project') items = items.filter(i => i.projectId)
   else if (filterScope.value === 'asset') items = items.filter(i => !i.projectId)
-  // Fuse.js 模糊搜索
-  const q = prompt.query.value.trim()
-  if (q) {
-    const fuse = new Fuse(items, {
-      keys: ['title', 'content', 'tags'],
-      threshold: 0.4,
-      ignoreLocation: true,
-      minMatchCharLength: 1,
-    })
-    items = fuse.search(q).map(r => r.item)
-  }
   return items
+})
+
+const fuseInstance = computed(() => new Fuse(baseItems.value, {
+  keys: ['title', 'content', 'tags'],
+  threshold: 0.4,
+  ignoreLocation: true,
+  minMatchCharLength: 1,
+}))
+
+const filteredItems = computed(() => {
+  const q = prompt.query.value.trim()
+  if (!q) return baseItems.value
+  return fuseInstance.value.search(q).map(r => r.item)
 })
 
 watch(selectedUnit, (u) => {
@@ -138,16 +138,12 @@ function restoreSnapshot(snap: { version: number; body: string }) {
     note: `保存于恢复前`,
     createdAt: now,
   })
-  // 从快照内容重新提取变量
+  // 从快照内容重新提取变量（只保留模板中实际存在的变量）
   const detected = extractVariables(snap.body)
-  const seen = new Set<string>()
-  const vars: Variable[] = []
-  for (const d of detected) {
+  const vars: Variable[] = detected.map(d => {
     const existing = u.variables?.find(v => v.name === d.name)
-    vars.push({ name: d.name, required: existing?.required ?? d.required, defaultValue: existing?.defaultValue ?? d.defaultValue })
-    seen.add(d.name)
-  }
-  if (u.variables) for (const v of u.variables) { if (!seen.has(v.name)) { vars.push({ ...v }); seen.add(v.name) } }
+    return { name: d.name, required: existing?.required ?? d.required, defaultValue: existing?.defaultValue ?? d.defaultValue }
+  })
   const newVersion = (u.version || 1) + 1
   prompt.updateItem(u.id, {
     content: snap.body,
