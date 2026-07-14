@@ -67,15 +67,30 @@ function handlePromptDelete(id: string) {
   showNotification('✓ 已移至回收站')
 }
 
+function handleClearHistory() {
+  if (confirm('确定清空所有历史记录？')) {
+    prompt.clearHistory()
+    showNotification('✓ 已清空')
+  }
+}
+
 function handlePromptEdit(id: string) {
   // 导航到管理视图并选中该项
   router.navigateToManage(id)
 }
 
+const emptyState = computed(() => {
+  const tab = prompt.spaceTab.value
+  if (tab === 'recent') return { title: '暂无使用记录', desc: '使用提示词后会自动记录在这里' }
+  if (tab === 'favorite') return { title: '暂无收藏', desc: '点击提示词左侧 ☆ 即可收藏' }
+  return { title: '', desc: '' }
+})
+
 const sideNav = computed(() => [
   { key: 'all' as const, label: '全部', icon: '📋' },
   { key: 'recent' as const, label: '最近', icon: '🕘' },
   { key: 'favorite' as const, label: '收藏', icon: '⭐' },
+  { key: 'history' as const, label: '历史', icon: '📜' },
   { key: 'project' as const, label: '项目', icon: '📁' },
   { key: 'asset' as const, label: '资产', icon: '📦' },
   { key: 'trash' as const, label: '回收站', icon: '🗑' },
@@ -107,6 +122,12 @@ async function handleCopy() {
     await copyText(text)
     showNotification('✓ 已复制')
     await prompt.recordUsage(unit.id)
+    await prompt.addHistory({
+      promptId: unit.id,
+      promptTitle: unit.title,
+      copiedContent: text,
+      variableValues: unit.variables?.length ? { ...prompt.variableValues.value } : undefined,
+    })
     if (appSettings.settings.value.closeAfterCopy) hideMainWindow()
     prompt.resetSelection()
   } catch (e: any) { showNotification(`复制失败: ${e.message}`) }
@@ -144,6 +165,11 @@ function handleKeyDown(e: KeyboardEvent) {
         copyText(item.content).then(async () => {
           showNotification('✓ 已复制')
           await prompt.recordUsage(item.id)
+          await prompt.addHistory({
+            promptId: item.id,
+            promptTitle: item.title,
+            copiedContent: item.content,
+          })
           if (appSettings.settings.value.closeAfterCopy) hideMainWindow()
         })
       }
@@ -158,7 +184,9 @@ onMounted(() => {
   window.addEventListener('keydown', handleKeyDown)
   window.addEventListener('click', closeCtxMenu)
   projectStore.ensureReady()
-  setTimeout(() => { const input = document.querySelector('.topbar-search') as HTMLInputElement; input?.focus() }, 100)
+  if (appSettings.settings.value.autoFocus) {
+    setTimeout(() => { const input = document.querySelector('.topbar-search') as HTMLInputElement; input?.focus() }, 100)
+  }
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
@@ -176,10 +204,11 @@ onUnmounted(() => {
         <span class="side-icon">{{ nav.icon }}</span>
         <span class="side-label">{{ nav.label }}</span>
         <span v-if="nav.key === 'all'" class="side-count">{{ prompt.liveItems.value.length }}</span>
+        <span v-if="nav.key === 'history'" class="side-count">{{ prompt.historyItems.value.length }}</span>
         <span v-if="nav.key === 'trash'" class="side-count">{{ prompt.trashItems.value.length }}</span>
       </div>
       <!-- 标签管理 -->
-      <div v-if="prompt.spaceTab.value !== 'trash' && prompt.allTags.value.length" class="side-tags">
+      <div v-if="prompt.spaceTab.value !== 'trash' && prompt.spaceTab.value !== 'history' && prompt.allTags.value.length" class="side-tags">
         <div class="side-tags-title">标签</div>
         <div
           v-for="tag in prompt.allTags.value.slice(0, 20)"
@@ -250,6 +279,8 @@ onUnmounted(() => {
                 :items="prompt.filteredCallItems.value"
                 :active-index="prompt.keyboardIndex.value"
                 :selected-id="prompt.selectedPrompt.value?.id"
+                :empty-title="emptyState.title"
+                :empty-desc="emptyState.desc"
                 @select="(i: number) => { prompt.keyboardIndex.value = i }"
                 @activate="prompt.selectActive()"
                 @enter-wizard="router.enterWizard(prompt.query.value.trim(), currentProjectId())"
@@ -267,6 +298,40 @@ onUnmounted(() => {
                 @cancel="prompt.phase.value = 'search'; prompt.selectedPrompt.value = null"
               />
             </template>
+          </div>
+        </div>
+      </template>
+
+      <!-- 历史 tab -->
+      <template v-else-if="prompt.spaceTab.value === 'history'">
+        <div class="history-view">
+          <div class="history-header">
+            <span class="history-title">使用历史</span>
+            <div class="history-actions">
+              <button
+                :class="['sort-btn', { active: true }]"
+                @click="prompt.historySortDir.value = prompt.historySortDir.value === 'desc' ? 'asc' : 'desc'"
+              >{{ prompt.historySortDir.value === 'desc' ? '最新优先' : '最早优先' }}</button>
+              <button v-if="prompt.historyItems.value.length" class="btn danger" @click="handleClearHistory">清空</button>
+            </div>
+          </div>
+          <div v-if="!prompt.sortedHistoryItems.value.length" class="empty-hint">暂无使用历史</div>
+          <div v-else class="history-list">
+            <div v-for="h in prompt.sortedHistoryItems.value" :key="h.id" class="history-item">
+              <div class="history-info">
+                <div class="history-prompt-title">{{ h.promptTitle }}</div>
+                <div class="history-content-preview">{{ h.copiedContent.slice(0, 120) }}{{ h.copiedContent.length > 120 ? '…' : '' }}</div>
+                <div class="history-meta">
+                  <span class="history-time">{{ new Date(h.usedAt).toLocaleString('zh-CN') }}</span>
+                  <span v-if="h.variableValues" class="history-vars">{{ Object.keys(h.variableValues).length }} 变量</span>
+                </div>
+              </div>
+              <div class="history-item-actions">
+                <button class="btn" @click="router.navigateToManage(h.promptId)" title="查看原始提示词">查看</button>
+                <button class="btn" @click="copyText(h.copiedContent); showNotification('✓ 已复制')">复制</button>
+                <button class="btn icon-btn" title="删除" @click="prompt.deleteHistoryEntry(h.id)">✕</button>
+              </div>
+            </div>
           </div>
         </div>
       </template>
@@ -295,6 +360,8 @@ onUnmounted(() => {
             :items="prompt.filteredCallItems.value"
             :active-index="prompt.keyboardIndex.value"
             :selected-id="prompt.selectedPrompt.value?.id"
+            :empty-title="emptyState.title"
+            :empty-desc="emptyState.desc"
             @select="(i: number) => { prompt.keyboardIndex.value = i }"
             @activate="prompt.selectActive()"
             @enter-wizard="router.enterWizard(prompt.query.value.trim(), currentProjectId())"
@@ -447,6 +514,52 @@ onUnmounted(() => {
 .project-item.active { background: var(--pf-accent-soft); color: var(--pf-accent); font-weight: 600; }
 .pi-name { font-size: 13px; }
 .pi-count { font-size: 11px; color: var(--pf-text-faint); font-family: var(--pf-font-mono); }
+
+/* 历史 */
+.history-view { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.history-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; border-bottom: 1px solid var(--pf-border);
+  background: var(--pf-bg-elevated); flex-shrink: 0;
+}
+.history-title { font-size: 15px; font-weight: 700; }
+.history-actions { display: flex; gap: 6px; align-items: center; }
+.history-actions .sort-btn {
+  border: 1px solid var(--pf-border); border-radius: var(--pf-radius-xs);
+  background: var(--pf-surface); font-size: 11px; color: var(--pf-text-muted);
+  padding: 3px 8px; cursor: pointer; transition: all 0.12s;
+}
+.history-actions .sort-btn:hover { border-color: var(--pf-accent); color: var(--pf-accent); }
+.history-actions .sort-btn.active { background: var(--pf-accent-soft); color: var(--pf-accent); border-color: var(--pf-accent); font-weight: 600; }
+.history-actions .btn.danger { height: 26px; padding: 0 10px; font-size: 11px; color: var(--pf-danger, #ef4444); }
+.history-actions .btn.danger:hover { background: rgba(239, 68, 68, 0.08); }
+.history-list { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.history-item {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12px;
+  padding: 12px 16px; border-radius: var(--pf-radius-md);
+  border: 1px solid var(--pf-border); background: var(--pf-surface);
+  transition: all 0.12s;
+}
+.history-item:hover { border-color: var(--pf-border-hover); background: var(--pf-surface-hover); }
+.history-info { flex: 1; min-width: 0; }
+.history-prompt-title { font-size: 13px; font-weight: 600; color: var(--pf-text); margin-bottom: 4px; }
+.history-content-preview {
+  font-size: 12px; color: var(--pf-text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-bottom: 4px; max-width: 500px;
+}
+.history-meta { display: flex; gap: 8px; align-items: center; }
+.history-time { font-size: 11px; color: var(--pf-text-faint); font-family: var(--pf-font-mono); }
+.history-vars { font-size: 11px; color: var(--pf-accent); font-weight: 500; }
+.history-item-actions { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
+.history-item-actions .btn { height: 26px; padding: 0 10px; font-size: 11px; }
+.history-item-actions .icon-btn {
+  width: 24px; height: 24px; padding: 0; font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--pf-radius-sm); color: var(--pf-text-faint);
+  background: none; border: none; cursor: pointer; transition: all 0.12s;
+}
+.history-item-actions .icon-btn:hover { background: var(--pf-surface-raised); color: var(--pf-danger, #ef4444); }
 
 /* 回收站 */
 .trash-list { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }

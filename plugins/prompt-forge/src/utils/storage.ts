@@ -1,10 +1,10 @@
-import type { PromptItem, Project } from '../types'
+import type { PromptItem, Project, HistoryEntry } from '../types'
 
 /** 获取 KV 存储实例 */
 function getKv() {
-  const preload = (window as any).kvStorage
+  const preload = window.kvStorage
   if (preload) return preload
-  const ds = (window as any).ztools?.dbStorage
+  const ds = window.ztools?.dbStorage
   if (ds) return {
     get: (key: string) => ds.getItem('pf:' + key),
     set: (key: string, value: any) => ds.setItem('pf:' + key, value),
@@ -18,6 +18,7 @@ function getKv() {
 const PROMPTS_KEY = 'prompts'
 const PROJECTS_KEY = 'projects'
 const SETTINGS_KEY = 'settings'
+const HISTORY_KEY = 'history'
 
 export async function loadPrompts(): Promise<PromptItem[]> {
   const kv = getKv()
@@ -28,12 +29,14 @@ export async function loadPrompts(): Promise<PromptItem[]> {
     const defaults = seedPrompts()
     kv.set(PROMPTS_KEY, defaults)
     return defaults
-  } catch { return seedPrompts() }
+  } catch (e) { console.error('[storage] loadPrompts failed:', e); return seedPrompts() }
 }
 
 export async function savePrompts(items: PromptItem[]): Promise<void> {
   const kv = getKv()
-  if (kv) kv.set(PROMPTS_KEY, JSON.parse(JSON.stringify(items)))
+  if (!kv) return
+  try { kv.set(PROMPTS_KEY, JSON.parse(JSON.stringify(items))) }
+  catch (e) { console.error('[storage] savePrompts failed:', e) }
 }
 
 // ====== Projects ======
@@ -41,25 +44,47 @@ export async function savePrompts(items: PromptItem[]): Promise<void> {
 export async function loadProjects(): Promise<Project[]> {
   const kv = getKv()
   if (!kv) return []
-  try { return kv.get(PROJECTS_KEY) || [] } catch { return [] }
+  try { return kv.get(PROJECTS_KEY) || [] }
+  catch (e) { console.error('[storage] loadProjects failed:', e); return [] }
 }
 
 export async function saveProjects(items: Project[]): Promise<void> {
   const kv = getKv()
-  if (kv) kv.set(PROJECTS_KEY, JSON.parse(JSON.stringify(items)))
+  if (!kv) return
+  try { kv.set(PROJECTS_KEY, JSON.parse(JSON.stringify(items))) }
+  catch (e) { console.error('[storage] saveProjects failed:', e) }
+}
+
+// ====== History ======
+
+export async function loadHistory(): Promise<HistoryEntry[]> {
+  const kv = getKv()
+  if (!kv) return []
+  try { return kv.get(HISTORY_KEY) || [] }
+  catch (e) { console.error('[storage] loadHistory failed:', e); return [] }
+}
+
+export async function saveHistory(entries: HistoryEntry[]): Promise<void> {
+  const kv = getKv()
+  if (!kv) return
+  try { kv.set(HISTORY_KEY, JSON.parse(JSON.stringify(entries))) }
+  catch (e) { console.error('[storage] saveHistory failed:', e) }
 }
 
 // ====== Settings ======
 
 export async function getSettings(): Promise<Record<string, any> | null> {
   const kv = getKv()
-  if (kv) return kv.get(SETTINGS_KEY)
-  return null
+  if (!kv) return null
+  try { return kv.get(SETTINGS_KEY) }
+  catch (e) { console.error('[storage] getSettings failed:', e); return null }
 }
 
 export async function setSettings(settings: Record<string, any>): Promise<void> {
   const kv = getKv()
-  if (kv) kv.set(SETTINGS_KEY, settings)
+  if (!kv) return
+  try { kv.set(SETTINGS_KEY, settings) }
+  catch (e) { console.error('[storage] setSettings failed:', e) }
 }
 
 // ====== Seed ======

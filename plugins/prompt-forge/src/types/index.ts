@@ -54,6 +54,17 @@ export interface SearchResult {
   score: number
 }
 
+/** 使用历史记录 */
+export interface HistoryEntry {
+  id: string
+  promptId: string
+  promptTitle: string
+  copiedContent: string
+  /** 变量填写值快照 */
+  variableValues?: Record<string, string>
+  usedAt: number
+}
+
 /** DB 文档格式 */
 export interface PromptDoc {
   _id: string

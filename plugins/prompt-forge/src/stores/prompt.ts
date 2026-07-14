@@ -1,29 +1,32 @@
 import { ref, computed } from 'vue'
-import type { PromptItem } from '../types'
-import { loadPrompts, savePrompts } from '../utils/storage'
+import Fuse from 'fuse.js'
+import type { PromptItem, HistoryEntry } from '../types'
+import { loadPrompts, savePrompts, loadHistory, saveHistory } from '../utils/storage'
+import { useAppSettings } from './app'
+import { generateId } from '../utils/index'
 
 const rawItems = ref<PromptItem[]>([])
+const historyItems = ref<HistoryEntry[]>([])
 const isLoading = ref(false)
 let _initPromise: Promise<void> | null = null
 
+// 筛选 & 排序状态（模块级，确保所有组件共享同一份）
+const spaceTab = ref<'all' | 'recent' | 'favorite' | 'project' | 'asset' | 'history' | 'trash'>('recent')
+const query = ref('')
+const filterTag = ref('')
+const filterProjectId = ref('')
+const activePromptId = ref('')
+const sortBy = ref<'createdAt' | 'updatedAt' | 'title' | 'usageCount'>('createdAt')
+const sortDir = ref<'desc' | 'asc'>('desc')
+const historySortDir = ref<'desc' | 'asc'>('desc')
+
+// 调用阶段
+const phase = ref<'search' | 'fill'>('search')
+const selectedPrompt = ref<PromptItem | null>(null)
+const variableValues = ref<Record<string, string>>({})
+const keyboardIndex = ref(0)
+
 export function usePromptStore() {
-  // 筛选状态
-  const spaceTab = ref<'all' | 'recent' | 'favorite' | 'project' | 'asset' | 'trash'>('recent')
-  const query = ref('')
-  const filterTag = ref('')
-  const filterProjectId = ref('')
-  const activePromptId = ref('')
-  const sortBy = ref<'createdAt' | 'updatedAt' | 'title' | 'usageCount'>('createdAt')
-  const sortDir = ref<'desc' | 'asc'>('desc')
-
-  /** 不含已删除项 */
-
-  // 调用阶段
-  const phase = ref<'search' | 'fill'>('search')
-  const selectedPrompt = ref<PromptItem | null>(null)
-  const variableValues = ref<Record<string, string>>({})
-  const keyboardIndex = ref(0)
-
   /** 不含已删除项 */
   const liveItems = computed(() => rawItems.value.filter(i => !i.deleted))
 
@@ -34,6 +37,16 @@ export function usePromptStore() {
       .sort((a, b) => (b.lastUsedAt || 0) - (a.lastUsedAt || 0))
       .slice(0, 20)
   )
+
+  /** 历史记录列表（按时间排序） */
+  const sortedHistoryItems = computed(() => {
+    const items = [...historyItems.value]
+    items.sort((a, b) => {
+      const dir = historySortDir.value === 'desc' ? -1 : 1
+      return dir * (a.usedAt - b.usedAt)
+    })
+    return items
+  })
 
   /** 收藏 */
   const favoriteItems = computed(() => liveItems.value.filter(i => i.favorite))
@@ -84,15 +97,23 @@ export function usePromptStore() {
     return [...set].sort()
   })
 
-  // ====== 调用阶段的搜索结果 ======
+  // ====== Fuse.js 模糊搜索 ======
+  const fuseInstance = computed(() => new Fuse(spaceItems.value, {
+    keys: [
+      { name: 'title', weight: 0.5 },
+      { name: 'content', weight: 0.3 },
+      { name: 'tags', weight: 0.2 },
+    ],
+    threshold: 0.4,
+    includeScore: true,
+    ignoreLocation: true,
+    minMatchCharLength: 1,
+  }))
+
   const filteredCallItems = computed(() => {
-    if (!query.value.trim()) return spaceItems.value
-    const q = query.value.toLowerCase()
-    return spaceItems.value.filter(i =>
-      i.title.toLowerCase().includes(q) ||
-      i.content.toLowerCase().includes(q) ||
-      i.tags.some(t => t.toLowerCase().includes(q))
-    )
+    const q = query.value.trim()
+    if (!q) return spaceItems.value
+    return fuseInstance.value.search(q).map(r => r.item)
   })
 
   const activeItem = computed(() => {
@@ -131,6 +152,7 @@ export function usePromptStore() {
     _initPromise = (async () => {
       isLoading.value = true
       rawItems.value = await loadPrompts()
+      historyItems.value = await loadHistory()
       isLoading.value = false
     })()
     return _initPromise
@@ -139,6 +161,30 @@ export function usePromptStore() {
   async function ensureReady() { await init() }
 
   async function persistAll() { await savePrompts(rawItems.value) }
+
+  async function addHistory(entry: Omit<HistoryEntry, 'id' | 'usedAt'>) {
+    const record: HistoryEntry = {
+      id: generateId(),
+      ...entry,
+      usedAt: Date.now(),
+    }
+    historyItems.value.unshift(record)
+    const max = useAppSettings().settings.value.maxHistory || 200
+    if (historyItems.value.length > max) {
+      historyItems.value = historyItems.value.slice(0, max)
+    }
+    await saveHistory(historyItems.value)
+  }
+
+  async function clearHistory() {
+    historyItems.value = []
+    await saveHistory(historyItems.value)
+  }
+
+  async function deleteHistoryEntry(id: string) {
+    historyItems.value = historyItems.value.filter(h => h.id !== id)
+    await saveHistory(historyItems.value)
+  }
 
   async function recordUsage(id: string) {
     const item = rawItems.value.find(i => i.id === id)
@@ -183,14 +229,16 @@ export function usePromptStore() {
   }
 
   return {
-    rawItems, isLoading,
+    rawItems, historyItems, isLoading,
     spaceTab, query, filterTag, filterProjectId, activePromptId,
-    sortBy, sortDir,
+    sortBy, sortDir, historySortDir,
     phase, selectedPrompt, variableValues, keyboardIndex,
     liveItems, recentItems, favoriteItems, assetItems, trashItems,
+    sortedHistoryItems,
     spaceItems, allTags, filteredCallItems, activeItem,
     moveSelection, selectActive, resetSelection,
     init, ensureReady, persistAll, recordUsage,
+    addHistory, clearHistory, deleteHistoryEntry,
     toggleFavorite, softDelete, restore, hardDelete,
     addItem, updateItem,
   }

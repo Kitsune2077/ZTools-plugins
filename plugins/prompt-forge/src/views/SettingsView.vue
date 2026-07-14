@@ -56,6 +56,14 @@ async function clearAll() {
         <div class="setting-row"><div class="info"><div class="lbl">复制后关闭窗口</div><div class="desc">复制成功后自动隐藏插件窗口</div></div>
           <div class="toggle" :class="{ on: appSettings.settings.value.closeAfterCopy }" @click="appSettings.settings.value.closeAfterCopy = !appSettings.settings.value.closeAfterCopy; appSettings.save()"></div>
         </div>
+        <div class="setting-row"><div class="info"><div class="lbl">自动聚焦搜索框</div><div class="desc">打开插件时自动聚焦到搜索输入框</div></div>
+          <div class="toggle" :class="{ on: appSettings.settings.value.autoFocus }" @click="appSettings.settings.value.autoFocus = !appSettings.settings.value.autoFocus; appSettings.save()"></div>
+        </div>
+        <div class="setting-row"><div class="info"><div class="lbl">历史记录上限</div><div class="desc">最多保留的使用历史条数（当前 {{ appSettings.settings.value.maxHistory }}）</div></div>
+          <div class="range-group">
+            <input type="range" min="50" max="500" step="50" :value="appSettings.settings.value.maxHistory" @input="appSettings.settings.value.maxHistory = +($event.target as HTMLInputElement).value; appSettings.save()" class="range-input" />
+          </div>
+        </div>
       </div>
       <div v-if="tab === 'theme'">
         <h2>主题设置</h2><p class="sub">选择界面外观。</p>
@@ -72,7 +80,7 @@ async function clearAll() {
       </div>
       <div v-if="tab === 'about'">
         <h2>关于 PromptForge</h2><p class="sub">AI 工作流增强插件。</p>
-        <div class="about-card"><div class="about-logo">PF</div><div><h3>PromptForge</h3><p class="ver">v1.0.0</p><p class="copy">© 2026</p></div></div>
+        <div class="about-card"><div class="about-logo">PF</div><div><h3>PromptForge</h3><p class="ver">v1.1.0</p><p class="copy">© 2026</p></div></div>
         <p class="privacy">本插件不发起网络请求。数据仅存储在本地。</p>
       </div>
     </div>
@@ -97,6 +105,8 @@ async function clearAll() {
 .toggle::before { content: ''; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: left 0.2s; }
 .toggle.on { background: var(--pf-accent); }
 .toggle.on::before { left: 18px; }
+.range-group { flex-shrink: 0; display: flex; align-items: center; gap: 8px; }
+.range-input { width: 120px; accent-color: var(--pf-accent); cursor: pointer; }
 .theme-card { padding: 16px; border: 2px solid var(--pf-border); border-radius: var(--pf-radius-md); cursor: pointer; text-align: center; transition: all 0.15s; }
 .theme-card.active { border-color: var(--pf-accent); background: var(--pf-accent-soft); }
 .theme-card span { font-size: 13px; font-weight: 600; margin-top: 8px; display: block; }
