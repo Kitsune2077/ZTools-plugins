@@ -1,6 +1,6 @@
 {
   "name": "dir-break",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "description": "将文件夹内的文件释放到上一级，解散空文件夹",
   "type": "module",
   "scripts": {

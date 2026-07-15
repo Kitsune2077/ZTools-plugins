@@ -62,7 +62,8 @@ window.services = {
     const entries = fs.readdirSync(dirPath)
     for (const name of entries) {
       const fullPath = path.join(dirPath, name)
-      const s = fs.statSync(fullPath)
+      let s
+      try { s = fs.statSync(fullPath) } catch { continue }
       if (s.isDirectory()) {
         info.dirs.push({ name, path: fullPath, relativePath: getRelativePath(fullPath, dirPath), size: 0 })
         info.totalDirs++
@@ -72,7 +73,9 @@ window.services = {
             info.files.push({ ...f, relativePath: getRelativePath(f.path, dirPath) })
             addToTypeMap(f.name)
           }
-          info.dirs.push(...sub.dirs)
+          for (const d of sub.dirs) {
+            info.dirs.push({ ...d, relativePath: getRelativePath(d.path, dirPath) })
+          }
           info.totalFiles += sub.totalFiles
           info.totalDirs += sub.totalDirs
           info.totalSize += sub.totalSize
@@ -166,7 +169,9 @@ window.services = {
       let finalTarget = targetPath
 
       if (fs.existsSync(targetPath)) {
-        if (conflictStrategy === 'rename') {
+        if (targetPath === dirPath) {
+          finalTarget = genUniquePath(targetPath)
+        } else if (conflictStrategy === 'rename') {
           finalTarget = genUniquePath(targetPath)
         } else if (conflictStrategy === 'overwrite') {
           fs.rmSync(targetPath, { recursive: true, force: true })

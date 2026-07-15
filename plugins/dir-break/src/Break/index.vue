@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue'
-import type { ScanResult, BreakRecord, ConflictStrategy, FileInfo } from '../types'
+import type { ScanResult, BreakRecord, ConflictStrategy } from '../types'
 
 const props = defineProps({
   enterAction: { type: Object, required: true }
@@ -55,34 +55,6 @@ const previewDirs = computed(() => {
   const remaining = topDirs.length - items.length
   return { items, remaining: Math.max(0, remaining) }
 })
-
-const afterSummary = computed(() => {
-  if (!scanResult.value) return ''
-  const sr = scanResult.value
-  const topFiles = sr.files.filter(f => f.relativePath.indexOf('/') === -1).length
-  const topDirs = sr.dirs.filter(d => d.relativePath.indexOf('/') === -1).length
-  if (recursive.value) {
-    const nestedFiles = sr.totalFiles - topFiles
-    const nestedDirs = sr.totalDirs - topDirs
-    const items: string[] = []
-    if (topFiles > 0) items.push(topFiles + ' 个直接文件')
-    if (topDirs > 0) items.push(topDirs + ' 个目录')
-    if (nestedFiles > 0) items.push(nestedFiles + ' 个子文件')
-    if (nestedDirs > 0) items.push(nestedDirs + ' 个子目录')
-    return '所有 ' + items.join(' + ') + ' 将提取到父目录'
-  }
-  const items: string[] = []
-  if (topFiles > 0) items.push(topFiles + ' 个文件')
-  if (topDirs > 0) items.push(topDirs + ' 个目录')
-  return (items.length > 0 ? items.join(' + ') : '无内容') + ' 将整体移到父目录'
-})
-
-function pathDirname(p: string) {
-  const idx = p.lastIndexOf('/')
-  const idx2 = p.lastIndexOf('\\')
-  const i = Math.max(idx, idx2)
-  return i > 0 ? p.slice(0, i) : p
-}
 
 function loadHistory() {
   try {

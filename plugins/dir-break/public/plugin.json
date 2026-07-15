@@ -4,7 +4,7 @@
   "title": "解散文件夹",
   "description": "将文件夹内的所有文件释放到上一层目录，一键解散空文件夹",
   "author": "meidlinger",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "main": "index.html",
   "preload": "preload/services.js",
   "logo": "logo.png",
