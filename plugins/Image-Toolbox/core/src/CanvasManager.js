@@ -1,16 +1,7 @@
-﻿import eventBus from './EventBus.js';
+import eventBus from './EventBus.js';
+import { CANVAS_DEFAULTS } from './utils/constants.js';
 
 const CLIP_PATH_SERIALIZED_PROPS = ['clipPath', 'absolutePositioned', 'inverted'];
-
-const DEFAULT_CANVAS_OPTIONS = {
-  width: 800,
-  height: 600,
-  backgroundColor: '#d2d6d9',
-  preserveObjectStacking: true,
-  selection: true,
-  stopContextMenu: true,
-  fireRightClick: true,
-};
 
 /**
  * 画布管理器 — 封装 Fabric.js 画布的创建、配置和基础操作
@@ -23,6 +14,8 @@ class CanvasManager {
     this.zoomLevel = 1;
     this._historySaveTimer = null;
     this._isCropMode = false;
+    this._resizeObserver = null;
+    this._boundResize = null;
   }
 
   // ── 生命周期 ──
@@ -37,7 +30,16 @@ class CanvasManager {
       throw new Error(`[CanvasManager] 找不到画布元素 #${this._canvasElId}`);
     }
 
-    const config = { ...DEFAULT_CANVAS_OPTIONS, ...options };
+    const config = {
+      width: CANVAS_DEFAULTS.WIDTH,
+      height: CANVAS_DEFAULTS.HEIGHT,
+      backgroundColor: CANVAS_DEFAULTS.BACKGROUND_COLOR,
+      preserveObjectStacking: CANVAS_DEFAULTS.PRESERVE_OBJECT_STACKING,
+      selection: CANVAS_DEFAULTS.SELECTION,
+      stopContextMenu: CANVAS_DEFAULTS.STOP_CONTEXT_MENU,
+      fireRightClick: CANVAS_DEFAULTS.FIRE_RIGHT_CLICK,
+      ...options,
+    };
     this.canvas = new fabric.Canvas(this._canvasElId, config);
     this._bindEvents();
     this._updateCanvasSize();
@@ -48,6 +50,14 @@ class CanvasManager {
    * 销毁画布，释放内存
    */
   destroy() {
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+    if (this._boundResize) {
+      window.removeEventListener('resize', this._boundResize);
+      this._boundResize = null;
+    }
     if (this._historySaveTimer) {
       clearTimeout(this._historySaveTimer);
     }
@@ -96,7 +106,7 @@ class CanvasManager {
           fabricImg.width, fabricImg.height, fabricImg.type);
 
         this.originalImage = fabricImg;
-        fabricImg._originalImage = true;
+        this._applyBackgroundImageProps(fabricImg);
         this.canvas.clear();
         this.canvas.add(fabricImg);
         this.canvas.renderAll();
@@ -149,17 +159,40 @@ class CanvasManager {
           const index = this.canvas.getObjects().indexOf(this.originalImage);
           this.canvas.remove(this.originalImage);
           this.originalImage = fabricImg;
-          fabricImg._originalImage = true;
+          this._applyBackgroundImageProps(fabricImg);
           this.canvas.insertAt(fabricImg, index >= 0 ? index : 0);
         } else {
           this.originalImage = fabricImg;
-          fabricImg._originalImage = true;
+          this._applyBackgroundImageProps(fabricImg);
           this.canvas.insertAt(fabricImg, 0);
         }
         this.canvas.renderAll();
         resolve(fabricImg);
       }, undefined, 'anonymous');
     });
+  }
+
+  /**
+   * 给作为背景的 fabric.Image 设置通用属性：
+   * - 标记为 _originalImage（序列化/恢复时识别）
+   * - 允许选中/接收事件（用于图层面板和调色工具定位背景图层）
+   * - 显示变换控制点，允许像普通图层一样拖拽移动、缩放、旋转
+   * @param {fabric.Image} fabricImg
+   */
+  _applyBackgroundImageProps(fabricImg) {
+    fabricImg._originalImage = true;
+    fabricImg.set({
+      selectable: true,
+      evented: true,
+      hasControls: true,
+      hasBorders: true,
+      lockMovementX: false,
+      lockMovementY: false,
+      lockRotation: false,
+      lockScalingX: false,
+      lockScalingY: false,
+    });
+    fabricImg.setCoords();
   }
 
   /**
@@ -197,6 +230,7 @@ class CanvasManager {
       left: (cw - img.width * scale) / 2,
       top: (ch - img.height * scale) / 2,
     });
+    img.setCoords();
     this.canvas.renderAll();
   }
 
@@ -288,18 +322,28 @@ class CanvasManager {
       'id',
       'selectable',
       'evented',
+      'hasControls',
+      'hasBorders',
+      'lockMovementX',
+      'lockMovementY',
+      'lockRotation',
+      'lockScalingX',
+      'lockScalingY',
       'absolutePositioned',
       'inverted',
       'objectCaching',
       'strokeLineCap',
       'strokeLineJoin',
+      '_strokePosition',
       '_layerName',
       '_layerNameAuto',
       '_layerBaseName',
       '_layerKind',
+      '_layerShapeType',
       '_layerColorPresetName',
       '_layerWidthPresetName',
       '_layerPresetName',
+      '_layerLocked',
       '_mosaicDynamic',
       '_mosaicMode',
       '_mosaicSize',
@@ -326,31 +370,37 @@ class CanvasManager {
         return;
       }
 
-      // 提取 canvas 级别的 clipPath
+      // 提取 canvas 级别的 clipPath，避免修改历史栈里的原始快照对象。
       const canvasClipPathData = json._canvasClipPath;
-      delete json._canvasClipPath;
+      const snapshot = { ...json };
+      delete snapshot._canvasClipPath;
 
-      this.canvas.loadFromJSON(json, () => {
-        // 恢复 canvas.clipPath
+      this.canvas.loadFromJSON(snapshot, () => {
+        const finishRestore = () => {
+          // 恢复 originalImage 引用
+          const objs = this.canvas.getObjects();
+          this.originalImage = objs.find(o => o.type === 'image' && o._originalImage) || objs[0];
+          if (this.originalImage?.type === 'image') {
+            this._applyBackgroundImageProps(this.originalImage);
+          }
+          this.canvas.renderAll();
+          eventBus.emit('canvas:restored');
+          resolve();
+        };
+
         if (canvasClipPathData) {
           fabric.util.enlivenObjects([canvasClipPathData], (objects) => {
             this.canvas.clipPath = objects[0] || null;
             if (this.canvas.clipPath) {
               this.canvas.clipPath.absolutePositioned = true;
             }
-            this.canvas.renderAll();
+            finishRestore();
           });
         } else {
           // 快照中没有 clipPath → 清除画布上已有的（撤消裁切的关键）
           this.canvas.clipPath = null;
+          finishRestore();
         }
-
-        // 恢复 originalImage 引用
-        const objs = this.canvas.getObjects();
-        this.originalImage = objs.find(o => o.type === 'image' && o._originalImage) || objs[0];
-        this.canvas.renderAll();
-        eventBus.emit('canvas:restored');
-        resolve();
       });
     });
   }
@@ -365,6 +415,25 @@ class CanvasManager {
   isPointInCanvas(point) {
     return point.x >= 0 && point.x <= this.canvas.width
         && point.y >= 0 && point.y <= this.canvas.height;
+  }
+
+  /**
+   * 刷新动态马赛克（由 MosaicModule 注入）
+   * 此方法在 MosaicModule 激活时设置回调，避免直接依赖模块
+   * @param {function():void} callback
+   */
+  setRefreshDynamicMosaics(callback) {
+    this._refreshDynamicMosaics = callback;
+  }
+
+  /**
+   * 调用动态马赛克刷新回调
+   * @param {object} options
+   */
+  refreshDynamicMosaics(options) {
+    if (typeof this._refreshDynamicMosaics === 'function') {
+      this._refreshDynamicMosaics(options);
+    }
   }
 
   // ── 内部方法 ──
@@ -441,17 +510,16 @@ class CanvasManager {
     });
 
     // 窗口大小变化
-    window.addEventListener('resize', () => {
-      this._updateCanvasSize();
-    });
+    this._boundResize = () => this._updateCanvasSize();
+    window.addEventListener('resize', this._boundResize);
 
     // 使用 ResizeObserver 监听容器变化
     const container = this.canvas.wrapperEl?.parentElement;
     if (container && window.ResizeObserver) {
-      const observer = new ResizeObserver(() => {
+      this._resizeObserver = new ResizeObserver(() => {
         this._updateCanvasSize();
       });
-      observer.observe(container);
+      this._resizeObserver.observe(container);
     }
   }
 }

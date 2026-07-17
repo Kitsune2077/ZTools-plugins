@@ -1,8 +1,8 @@
-﻿import { eventBus } from '../../core/src/index.js';
+import { eventBus } from '../index.js';
 import { SIDE_PANEL_LAYOUT_KEY, SIDE_PANEL_LAYOUTS } from './SidePanelTabs.js';
-import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../../core/src/utils/theme.js';
-import { updateCategories, updateRecords, PLATFORMS } from '../../core/src/updateRecords.js';
-import { escapeHTML, escapeAttr } from '../../core/src/utils/helpers.js';
+import { THEME_CHOICES, applyThemeChoice, getThemeChoice } from '../utils/theme.js';
+import { updateCategories, updateRecords, PLATFORMS } from '../updateRecords.js';
+import { escapeHTML, escapeAttr } from '../utils/helpers.js';
 
 /**
  * 获取当前平台标识
@@ -39,8 +39,15 @@ export const EDITOR_SIDE_PANEL_POSITIONS = {
   LEFT: 'left',
 };
 
+export const TOOLBAR_LABELS_VISIBLE_KEY = 'image-toolbox-toolbar-labels-visible';
+export const TOOLBAR_LABELS_VISIBLE = {
+  ON: 'on',
+  OFF: 'off',
+};
+
 const VALID_EDITOR_BARS_LAYOUTS = new Set(Object.values(EDITOR_BARS_LAYOUTS));
 const VALID_EDITOR_SIDE_PANEL_POSITIONS = new Set(Object.values(EDITOR_SIDE_PANEL_POSITIONS));
+const VALID_TOOLBAR_LABELS_VISIBLE = new Set(Object.values(TOOLBAR_LABELS_VISIBLE));
 
 /**
  * Account page UI component.
@@ -169,6 +176,13 @@ class AccountPage {
       if (editorSidePanelPosition) {
         this._setEditorSidePanelPosition(editorSidePanelPosition);
         this._render();
+        return;
+      }
+
+      const toolbarLabels = this._closest(e.target, '[data-toolbar-labels]')?.getAttribute('data-toolbar-labels');
+      if (toolbarLabels) {
+        this._setToolbarLabelsVisible(toolbarLabels);
+        this._render();
       }
     });
 
@@ -230,6 +244,7 @@ class AccountPage {
     const sidePanelLayout = this._getSidePanelLayout();
     const editorBarsLayout = this._getEditorBarsLayout();
     const editorSidePanelPosition = this._getEditorSidePanelPosition();
+    const toolbarLabels = this._getToolbarLabelsVisible();
     return `
       <div class="account-card">
         <div class="account-card__label">外观</div>
@@ -271,6 +286,16 @@ class AccountPage {
           <button class="account-page__theme-choice ${editorBarsLayout === EDITOR_BARS_LAYOUTS.STATUS_TOP ? 'account-page__theme-choice--active' : ''}" type="button" data-editor-bars-layout="${EDITOR_BARS_LAYOUTS.STATUS_TOP}">状态栏在顶部</button>
         </div>
       </div>
+
+      <div class="account-card">
+        <div class="account-card__label">编辑器</div>
+        <div class="account-card__value">侧栏图标文字</div>
+        <p>选择是否在侧栏工具图标下方显示文字标签。关闭后仅显示图标，更节省空间。</p>
+        <div class="account-page__theme-row">
+          <button class="account-page__theme-choice ${toolbarLabels === TOOLBAR_LABELS_VISIBLE.ON ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-labels="${TOOLBAR_LABELS_VISIBLE.ON}">显示文字</button>
+          <button class="account-page__theme-choice ${toolbarLabels === TOOLBAR_LABELS_VISIBLE.OFF ? 'account-page__theme-choice--active' : ''}" type="button" data-toolbar-labels="${TOOLBAR_LABELS_VISIBLE.OFF}">仅图标</button>
+        </div>
+      </div>
     `;
   }
 
@@ -278,6 +303,7 @@ class AccountPage {
     const appVersion = this._getCurrentVersion();
     const hostName = this._getHostName();
     const hostVersion = this._getHostVersion();
+    const qqUrl = this._getContactUrl();
 
     return `
       <div class="account-about">
@@ -320,7 +346,7 @@ class AccountPage {
                 <em>me@moruteaven.com</em>
               </span>
             </a>
-            <a class="account-about__contact" href="https://qm.qq.com/q/xdx9hstuGA" data-external-url="https://qm.qq.com/q/xdx9hstuGA">
+            <a class="account-about__contact" href="${this._escapeAttr(qqUrl)}" data-external-url="${this._escapeAttr(qqUrl)}">
               <span class="account-about__contact-icon">Q</span>
               <span>
                 <strong>QQ 交流群</strong>
@@ -512,6 +538,13 @@ class AccountPage {
     eventBus.emit('editorSidePanel:positionChanged', position);
   }
 
+  _setToolbarLabelsVisible(value) {
+    if (!VALID_TOOLBAR_LABELS_VISIBLE.has(value)) return;
+
+    localStorage.setItem(TOOLBAR_LABELS_VISIBLE_KEY, value);
+    eventBus.emit('toolbar:labelsVisibilityChanged', value);
+  }
+
   _getSidePanelLayout() {
     const saved = localStorage.getItem(SIDE_PANEL_LAYOUT_KEY);
     return Object.values(SIDE_PANEL_LAYOUTS).includes(saved) ? saved : SIDE_PANEL_LAYOUTS.TABS;
@@ -525,6 +558,11 @@ class AccountPage {
   _getEditorSidePanelPosition() {
     const saved = localStorage.getItem(EDITOR_SIDE_PANEL_POSITION_KEY);
     return VALID_EDITOR_SIDE_PANEL_POSITIONS.has(saved) ? saved : EDITOR_SIDE_PANEL_POSITIONS.RIGHT;
+  }
+
+  _getToolbarLabelsVisible() {
+    const saved = localStorage.getItem(TOOLBAR_LABELS_VISIBLE_KEY);
+    return VALID_TOOLBAR_LABELS_VISIBLE.has(saved) ? saved : TOOLBAR_LABELS_VISIBLE.ON;
   }
 
   _getHostUser() {
@@ -546,6 +584,16 @@ class AccountPage {
 
   _getHostName() {
     return this._host?.platform?.name || this._host?.getHostName?.() || 'uTools';
+  }
+
+  _getContactUrl() {
+    try {
+      const url = this._host?.getContactUrl?.();
+      if (url) return url;
+    } catch (e) {
+      console.warn('[AccountPage] 获取联系方式失败:', e);
+    }
+    return 'https://qm.qq.com/q/Nzn12S22e6';
   }
 
   _getInitial(name) {

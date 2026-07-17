@@ -1,5 +1,70 @@
 export const updateRecords = [
   {
+    version: '2.3.1',
+    date: '2026-07-17',
+    changes: {
+      added: [
+        { text: '设置页新增「侧栏图标文字」选项，可控制侧栏工具图标下方文字标签的展示', platforms: null }
+      ],
+      fixed: [
+        { text: '修复调色面板长时间使用后内存占用持续上升的问题', platforms: null },
+        { text: '修复平行四边形绘制时实际宽度超出拖拽框选范围的问题', platforms: null },
+        { text: '修复调色面板滑块调整后无法撤销的问题', platforms: null },
+        { text: '修复 ZTools 平台错误使用 uTools 宿主适配器导致的功能异常', platforms: ['ztools'] }
+      ],
+      improved: [
+        { text: '优化了展示效果', platforms: null }
+      ],
+      adjusted: [
+        { text: '修改了部分文字工具预设按钮名称并调大字体', platforms: null }
+      ],
+      removed: []
+    }
+  },
+  {
+    version: '2.3',
+    date: '2026-07-09',
+    changes: {
+      added: [
+        { text: '新增「调色」工具，支持滤镜预设以及亮度、对比度、饱和度、色相、模糊等参数调整', platforms: null }
+      ],
+      fixed: [
+        { text: '修复图形工具拖选绘制时部分情况下意外移动图层的问题', platforms: null },
+        { text: '修复添加文字后第一次撤销无反应的问题', platforms: null },
+        { text: '修复撤销/重做时偶尔出现画布状态异常的问题', platforms: null },
+        { text: '修复切换或停用工具后，已锁定图层可能被意外解锁的问题', platforms: null },
+        { text: '修复使用画笔、图形、马赛克等工具新建图层后，切回移动/框选工具无法直接选中图层的问题', platforms: null },
+        { text: '修复移动/框选工具选中背景图片后，无法调整宽高、位置、旋转或拖拽变换的问题', platforms: null },
+        { text: '修复使用文字工具编辑文字时，按快捷键会意外切换工具的问题', platforms: null }
+      ],
+      improved: [],
+      adjusted: [
+      ],
+      removed: []
+    }
+  },
+  {
+    version: '2.2.2',
+    date: '2026-06-29',
+    changes: {
+      added: [
+        { text: '图形工具新增平行四边形图形', platforms: null },
+        { text: '文字属性新增删除线复选框', platforms: null }
+      ],
+      fixed: [
+        { text: '修复部分编辑操作第一次撤销无反应的问题', platforms: null },
+        { text: '修复打开新图片后撤销可能恢复上一张图片的问题', platforms: null },
+        { text: '修复选择 JPEG/WebP 保存时实际仍写入 PNG 数据的问题', platforms: null },
+        { text: '修复 ZTools 端选中文字后缺少描边位置设置的问题', platforms: ['ztools'] },
+        { text: '修复裁剪撤销/重做时裁剪范围恢复不正确的问题', platforms: null },
+        { text: '修复清除所有马赛克后无法撤销恢复的问题', platforms: null }
+      ],
+      improved: [],
+      adjusted: [],
+      removed: []
+    }
+  },
+  {
     version: '2.2.1',
     date: '2026-06-26',
     changes: {

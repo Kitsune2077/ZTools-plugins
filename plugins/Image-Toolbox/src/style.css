@@ -198,6 +198,19 @@ html, body {
   white-space: nowrap;
 }
 
+.toolbar--labels-hidden .toolbar__btn {
+  width: 36px;
+  height: 36px;
+}
+
+.toolbar--labels-hidden .toolbar__btn span {
+  display: none;
+}
+
+.toolbar--labels-hidden .toolbar__separator {
+  width: 28px;
+}
+
 .toolbar__separator {
   width: 36px;
   height: 1px;
@@ -1015,6 +1028,13 @@ html, body {
   line-height: 1.2;
 }
 
+.options-hint {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .shape-picker-trigger {
   display: inline-flex;
   align-items: center;
@@ -1172,7 +1192,7 @@ html, body {
   background: #a8b0b5;
   color: var(--text-preset-fill, var(--color-text));
   border-color: #8a949a;
-  font-size: 14px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.15;
   -webkit-text-stroke: 0.45px var(--text-preset-stroke, transparent);
@@ -1186,6 +1206,16 @@ html, body {
 .text-preset-btn:hover {
   background: #9ca5aa;
   border-color: #7c878d;
+}
+
+/* 滤镜预设按钮（选项栏） */
+.filter-preset-btn {
+  min-width: 44px;
+}
+
+.filter-preset-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .brush-color-btn {
@@ -1379,6 +1409,7 @@ html, body {
 }
 
 .side-tabs__pane #property-panel,
+.side-tabs__pane #color-panel,
 .side-tabs__pane #layer-panel {
   height: 100%;
   min-height: 0;
@@ -1409,6 +1440,7 @@ html, body {
 .side-tabs--split .side-tabs__pane[data-panel-pane="layer"] {
   flex: 3;
   height: auto;
+  border-top: 1px solid var(--color-border);
 }
 
 .panel {
@@ -1584,6 +1616,17 @@ html, body {
 
 .property-btn--primary:hover {
   opacity: 0.88;
+}
+
+/* 调色重置按钮行 */
+.property-item--actions {
+  justify-content: flex-end;
+  padding: 4px 6px;
+}
+
+.property-item--actions .property-btn {
+  flex: 0 0 auto;
+  padding: 4px 12px;
 }
 
 .property-item label {
