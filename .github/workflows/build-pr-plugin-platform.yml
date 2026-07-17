@@ -37,11 +37,6 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-        with:
-          version: 9
-
       - name: Download build info
         uses: actions/download-artifact@v4
         with:
@@ -52,11 +47,110 @@ jobs:
         run: |
           node -e "const fs = require('fs'); fs.copyFileSync('release/build-info.${{ inputs.platform_name }}.json', 'release/build-info.json')"
 
+      - name: Detect Paste剪切板 build
+        id: pasteboard
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs'
+          const info = JSON.parse(readFileSync('release/build-info.json', 'utf8'))
+          const required = Array.isArray(info.changedPlugins) && info.changedPlugins.includes('pasteboard-pro')
+          appendFileSync(process.env.GITHUB_OUTPUT, `required=${required ? 'true' : 'false'}\n`)
+          NODE
+
+      - name: Setup Node.js 24 for Paste剪切板
+        if: steps.pasteboard.outputs.required == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: ${{ steps.pasteboard.outputs.required == 'true' && '11.7.0' || '9' }}
+
+      - name: Download Paste剪切板 Vision helper
+        if: steps.pasteboard.outputs.required == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: pasteboardpro-vision-pr-${{ inputs.pr_number }}
+          path: plugins/pasteboard-pro/apps/ztools/native/vision-helper/dist
+
+      - name: Restore Vision helper executable bit
+        if: steps.pasteboard.outputs.required == 'true'
+        shell: bash
+        run: |
+          chmod +x plugins/pasteboard-pro/apps/ztools/native/vision-helper/dist/pasteboard-vision
+          test -f plugins/pasteboard-pro/apps/ztools/native/vision-helper/dist/pasteboard-vision-attestation.json
+
+      - name: Verify Paste剪切板 workspace
+        if: steps.pasteboard.outputs.required == 'true'
+        working-directory: plugins/pasteboard-pro
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm typecheck
+          pnpm --filter @pasteboard-pro/atools typecheck
+          pnpm --filter @pasteboard-pro/ztools typecheck
+          pnpm typecheck:visual
+          pnpm test:contract
+          pnpm test:release-archive
+          pnpm test:visual-artifact
+          pnpm test:visual-contract
+          node apps/atools/scripts/verify-source.mjs
+          node apps/ztools/scripts/verify-package.mjs
+          pnpm test
+          pnpm benchmark:search
+
+      - name: Upload Paste剪切板 performance report
+        if: steps.pasteboard.outputs.required == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pasteboardpro-performance-pr-${{ inputs.pr_number }}
+          path: plugins/pasteboard-pro/artifacts/pasteboardpro/search-performance.json
+
+      - name: Install Paste剪切板 visual test browser
+        if: steps.pasteboard.outputs.required == 'true'
+        working-directory: plugins/pasteboard-pro
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Capture Paste剪切板 dual-host visual matrix
+        if: steps.pasteboard.outputs.required == 'true'
+        working-directory: plugins/pasteboard-pro
+        run: |
+          pnpm test:visual
+          pnpm verify:visual-artifact
+
+      - name: Upload Paste剪切板 visual evidence
+        if: always() && steps.pasteboard.outputs.required == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pasteboardpro-visual-pr-${{ inputs.pr_number }}
+          path: |
+            plugins/pasteboard-pro/artifacts/pasteboardpro/visual-matrix
+            plugins/pasteboard-pro/artifacts/pasteboardpro/playwright-report.json
+            plugins/pasteboard-pro/artifacts/pasteboardpro/playwright-results
+          if-no-files-found: error
+
       - name: Install root dependencies
         run: npm ci
 
       - name: Build changed plugins
         run: node scripts/build-plugins.js
+
+      - name: Verify final Paste剪切板 release archive
+        if: steps.pasteboard.outputs.required == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$(find release -maxdepth 1 -type f -name 'pasteboard-pro-*.zip' -print -quit)"
+          test -n "${archive}"
+          node plugins/pasteboard-pro/scripts/verify-release-archive.mjs \
+            "${archive}" \
+            --helper-attestation=plugins/pasteboard-pro/apps/ztools/native/vision-helper/dist/pasteboard-vision-attestation.json \
+            --require-helper-signature=adhoc \
+            --report=release/pasteboardpro-archive-verification.json
 
       - name: Upload plugin packages
         uses: actions/upload-artifact@v4
@@ -66,5 +160,6 @@ jobs:
             release/*.zip
             release/build-info.json
             release/latest
+            release/pasteboardpro-archive-verification.json
           if-no-files-found: error
           retention-days: 14
