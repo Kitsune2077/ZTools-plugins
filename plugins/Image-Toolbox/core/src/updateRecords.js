@@ -1,5 +1,27 @@
 export const updateRecords = [
   {
+    version: '2.3.1',
+    date: '2026-07-17',
+    changes: {
+      added: [
+        { text: '设置页新增「侧栏图标文字」选项，可控制侧栏工具图标下方文字标签的展示', platforms: null }
+      ],
+      fixed: [
+        { text: '修复调色面板长时间使用后内存占用持续上升的问题', platforms: null },
+        { text: '修复平行四边形绘制时实际宽度超出拖拽框选范围的问题', platforms: null },
+        { text: '修复调色面板滑块调整后无法撤销的问题', platforms: null },
+        { text: '修复 ZTools 平台错误使用 uTools 宿主适配器导致的功能异常', platforms: ['ztools'] }
+      ],
+      improved: [
+        { text: '优化了展示效果', platforms: null }
+      ],
+      adjusted: [
+        { text: '修改了部分文字工具预设按钮名称并调大字体', platforms: null }
+      ],
+      removed: []
+    }
+  },
+  {
     version: '2.3',
     date: '2026-07-09',
     changes: {
