@@ -77,4 +77,7 @@ console.log('uuid62 keyword view badge:', els.badge.textContent);
 run('not/valid!!', false);                          // garbage
 assert.strictEqual(els.badge.textContent, '无法识别');
 
+// fmtTime must render pre-1970 timestamps sanely (v1 epoch is 1582).
+assert.ok(ctx.fmtTime(-500).endsWith('.500'), 'negative ms: ' + ctx.fmtTime(-500));
+
 console.log('UI SMOKE PASSED');

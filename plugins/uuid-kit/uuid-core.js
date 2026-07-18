@@ -13,7 +13,7 @@
 
 function hexToBytes(hex) {
   const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+  for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
   return out;
 }
 
@@ -76,7 +76,7 @@ const B64URL_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012
 // width) so results match python `base58.b58encode(uuid.bytes)`.
 function encodeB58(hex32) {
   let zeroBytes = 0;
-  while (zeroBytes < 16 && hex32.substr(zeroBytes * 2, 2) === '00') zeroBytes++;
+  while (zeroBytes < 16 && hex32.slice(zeroBytes * 2, zeroBytes * 2 + 2) === '00') zeroBytes++;
   const digits = encodeAlphabet(hex32, B58_ALPHABET, 0);
   return '1'.repeat(zeroBytes) + digits;
 }

@@ -181,7 +181,7 @@ function fmtTime(ms) {
   const p = (n, w) => String(n).padStart(w || 2, '0');
   return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) +
     ' ' + p(d.getHours()) + ':' + p(d.getMinutes()) + ':' + p(d.getSeconds()) +
-    '.' + p(ms % 1000, 3);
+    '.' + p(d.getMilliseconds(), 3); // not ms % 1000: negative for pre-1970 v1/v6 timestamps
 }
 
 function metaText(info) {
@@ -306,6 +306,7 @@ function handle(text, autoCopy) {
 $('input').addEventListener('input', (e) => run(e.target.value, false));
 
 document.addEventListener('keydown', (e) => {
+  if (e.isComposing) return; // IME confirm must not trigger the copy shortcut
   if (e.key === 'Enter' && current) copyValue(current.primary);
 });
 
@@ -321,7 +322,7 @@ if (api && api.onPluginEnter) {
     try {
       api.setSubInput(
         ({ text }) => handle(text, false),
-        '粘贴 id 解析 · uuid7 · uuid4 x10 · uuid5 dns 名称 · uid xx [client]',
+        '粘贴 id 解析 · uuid7 · uuid4 x10 · uuid5 dns 名称',
         true
       );
     } catch (e) {}
