@@ -11,8 +11,19 @@
     {
       "code": "vsc-recent",
       "explain": "最近打开的 VSCode 项目",
-      "platform": ["win32", "darwin", "linux"],
-      "cmds": ["vsc"]
+      "platform": [
+        "win32",
+        "darwin",
+        "linux"
+      ],
+      "cmds": [
+        "vsc"
+      ]
     }
+  ],
+  "platform": [
+    "linux",
+    "win32",
+    "darwin"
   ]
 }
