@@ -79,7 +79,7 @@ function formatSize(bytes: number) {
       <div class="preview-section-header"><span>文件列表</span><span class="preview-section-count">{{ scanResult.totalFiles }}</span></div>
       <div class="preview-list">
         <div v-for="(f, i) in previewFiles.items" :key="i" class="preview-row"
-          :class="{ 'preview-row--nested': f.relativePath.indexOf('/') > -1 }">
+          :class="{ 'preview-row--nested': f.relativePath.includes('/') || f.relativePath.includes('\\') }">
           <span class="preview-row-icon">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" />

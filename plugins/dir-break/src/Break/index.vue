@@ -117,6 +117,8 @@ function loadDirectory(dirPath: string) {
   setTimeout(() => {
     try {
       const r = window.services.scanDirectory(dirPath, recursive.value)
+      r.files.forEach(f => f.relativePath = f.relativePath.replace(/\\/g, '/'))
+      r.dirs.forEach(d => d.relativePath = d.relativePath.replace(/\\/g, '/'))
       scanResult.value = r
       if (r.totalFiles === 0 && r.totalDirs === 0) error.value = '该文件夹为空'
     } catch (err: any) { error.value = err.message || '读取文件夹失败'; scanResult.value = null }
