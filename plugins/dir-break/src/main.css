@@ -46,25 +46,6 @@ body {
   color: var(--primary);
 }
 
-button {
-  font-family: inherit;
-  font-size: 14px;
-  border: none;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: background 0.15s, box-shadow 0.15s, opacity 0.15s;
-  outline: none;
-}
-
-button:focus-visible {
-  box-shadow: 0 0 0 2px var(--primary-light);
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 input, select {
   font-family: inherit;
   font-size: 14px;
@@ -118,3 +99,39 @@ input:focus, select:focus {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--text-muted);
 }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; padding: 8px 16px; font-size: 14px; font-weight: 500;
+  border-radius: var(--radius-sm); transition: background 0.15s, color 0.15s;
+  font-family: inherit; border: none; cursor: pointer; outline: none;
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { background: var(--primary); color: var(--primary-text); }
+.btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+.btn-action { width: 100%; padding: 10px; font-size: 15px; }
+.btn-ghost { background: transparent; color: var(--text-secondary); padding: 6px 12px; font-size: 13px; }
+.btn-ghost:hover { background: var(--bg-tertiary); color: var(--text); }
+.btn-small { padding: 4px 8px; font-size: 12px; }
+.btn-icon { padding: 6px; line-height: 1; }
+.btn-undo {
+  background: transparent; color: var(--primary); padding: 4px 12px;
+  font-size: 13px; font-weight: 500; border: 1px solid var(--primary); border-radius: var(--radius-sm);
+}
+.btn-undo:hover { background: var(--primary-light); }
+
+.loading-spinner {
+  width: 18px; height: 18px; border: 2px solid var(--border);
+  border-top-color: var(--primary); border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+.loading-spinner--small { width: 14px; height: 14px; border-width: 1.5px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.message {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 10px 14px; border-radius: var(--radius);
+  font-size: 13px; margin-bottom: 12px;
+}
+.message--error { background: var(--danger-light); color: var(--danger); }
+.message--success { background: var(--success-light); color: var(--success); }
