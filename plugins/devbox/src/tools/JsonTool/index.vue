@@ -60,7 +60,7 @@ function smartParse(text: string): { obj: unknown; error: string; unescaped: boo
         // 内层非 JSON，返回字符串本身
       }
     }
-    return { obj, error: '', unescaped: true }
+    return { obj, error: '', unescaped: false }
   }
   return { obj, error: '', unescaped: false }
 }
@@ -79,8 +79,7 @@ const isValid = computed(() => !parseResult.value.empty && !parseResult.value.er
 const SEP_Q = '\x00__Q'
 function protectQuotes(text: string): { result: string; store: string[] } {
   const store: string[] = []
-  let result = text.replace(/"(?:\\.|[^"\\])*"/g, (m) => { store.push(m); return SEP_Q + (store.length - 1) + '\x00' })
-  result = result.replace(/'(?:\\.|[^'\\])*'/g, (m) => { store.push(m); return SEP_Q + (store.length - 1) + '\x00' })
+  const result = text.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, (m) => { store.push(m); return SEP_Q + (store.length - 1) + '\x00' })
   return { result, store }
 }
 function restoreQuotes(text: string, store: string[]): string {
@@ -202,8 +201,14 @@ function buildFlatNodes(obj: unknown) {
   const nodes: TreeNode[] = []
   const expanded = new Set<string>()
   treeTruncated.value = false
+  let truncated = false
   function walk(val: unknown, path: string, level: number, label: string, isRoot: boolean) {
-    if (nodes.length >= MAX_TREE_NODES) { treeTruncated.value = true; return }
+    if (truncated) return
+    if (nodes.length >= MAX_TREE_NODES) {
+      truncated = true
+      treeTruncated.value = true
+      return
+    }
     const type = getType(val)
     let hasChildren = false
     let childCount = 0
