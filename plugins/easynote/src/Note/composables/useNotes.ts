@@ -73,6 +73,17 @@ export function useNotes() {
       const i = notes.findIndex((x) => x.id === draft.value.noteId)
       if (i >= 0) {
         notes[i] = { ...notes[i], content, title: extractTitle(content), updatedAt: now }
+      } else {
+        // 原便签已被删除，作为新便签重新创建，防止数据丢失
+        const n: Note = {
+          id: genId(),
+          title: extractTitle(content),
+          content,
+          createdAt: now,
+          updatedAt: now
+        }
+        notes.unshift(n)
+        draft.value.noteId = n.id
       }
     } else {
       const n: Note = {

@@ -40,6 +40,7 @@ onUnmounted(() => {
 function onBeforeUnload(e: BeforeUnloadEvent) {
   if (isStickyNoteOpen()) {
     e.preventDefault()
+    e.returnValue = ''
     // 阻止窗口关闭，改为隐藏
     try {
       window.ztools.hideMainWindow()

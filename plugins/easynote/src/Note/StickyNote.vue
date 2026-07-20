@@ -33,7 +33,7 @@ const emit = defineEmits<{
   (e: 'saved'): void
 }>()
 
-const { draft, updateDraft, saveDraft } = useNotes()
+const { draft, savedNotes, updateDraft, saveDraft } = useNotes()
 const { settings } = useSettings()
 
 const draftTitle = computed(() => extractTitle(draft.value.content))
@@ -59,6 +59,12 @@ function copyPlain() {
 }
 
 function onClose() {
+  // 检查是否有未保存的修改
+  const content = draft.value.content || ''
+  const isDirty = content.trim() && (!draft.value.noteId || savedNotes.value.find((x) => x.id === draft.value.noteId)?.content !== content)
+  if (isDirty && !confirm('当前便签有未保存的修改，确定要关闭吗？')) {
+    return
+  }
   // embedded（dev 主窗口内）：返回 Home；独立窗口：关闭自身
   if (props.embedded) emit('back')
   else window.close()

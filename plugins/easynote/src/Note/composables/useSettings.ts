@@ -25,10 +25,19 @@ function load(): Settings {
 // 模块级单例：同一渲染进程内共享（主窗口、便利贴窗口各自一份，但都读同一 dbStorage）
 const settings = ref<Settings>(load())
 
+let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
 watch(
   settings,
   (v) => {
-    window.ztools.dbStorage.setItem(KEY, JSON.stringify(v))
+    if (debounceTimer) clearTimeout(debounceTimer)
+    debounceTimer = setTimeout(() => {
+      try {
+        window.ztools.dbStorage.setItem(KEY, JSON.stringify(v))
+      } catch {
+        /* ignore */
+      }
+    }, 300)
   },
   { deep: true }
 )
