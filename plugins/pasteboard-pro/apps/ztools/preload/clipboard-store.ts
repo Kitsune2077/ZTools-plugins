@@ -396,7 +396,7 @@ export class ZToolsCanonicalClipboardStore implements CanonicalClipboardStore {
     if (normalizedText.length === 0) {
       throw new RangeError("Text item content cannot be empty");
     }
-    if (normalizedText.length > 10 * 1_024 * 1_024) {
+    if (Buffer.byteLength(normalizedText, "utf8") > 10 * 1_024 * 1_024) {
       throw new RangeError("Text item content cannot exceed 10 MiB");
     }
     const timestamp = this.validTimestamp();
@@ -447,7 +447,8 @@ export class ZToolsCanonicalClipboardStore implements CanonicalClipboardStore {
       throw new TypeError("Clipboard item does not support text editing");
     }
     const normalizedText = text.trim();
-    if (normalizedText.length === 0 || normalizedText.length > 10 * 1_024 * 1_024) {
+    const byteLength = Buffer.byteLength(normalizedText, "utf8");
+    if (byteLength === 0 || byteLength > 10 * 1_024 * 1_024) {
       throw new RangeError("Edited text must contain 1 byte to 10 MiB");
     }
     const timestamp = this.validTimestamp();

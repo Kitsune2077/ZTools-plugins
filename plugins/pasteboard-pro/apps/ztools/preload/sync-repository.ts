@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -32,6 +32,15 @@ function blobExtension(mediaType: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+async function existingFile(filePath: string): Promise<boolean> {
+  try {
+    return (await stat(filePath)).isFile();
+  } catch (error) {
+    if (isRecord(error) && error.code === "ENOENT") return false;
+    throw error;
+  }
 }
 
 function databaseStatus(error: unknown, status: number): boolean {
@@ -252,6 +261,7 @@ export class ZToolsSyncEntityRepository implements SyncEntityRepository {
       directory,
       `${digest}.${blobExtension(mediaType)}`,
     );
+    if (await existingFile(destination)) return destination;
     await mkdir(directory, { recursive: true });
     const temporary = `${destination}.tmp-${process.pid}-${Date.now()}`;
     try {
@@ -259,7 +269,8 @@ export class ZToolsSyncEntityRepository implements SyncEntityRepository {
       await rename(temporary, destination);
     } catch (error) {
       await rm(temporary, { force: true });
-      if (!(isRecord(error) && error.code === "EEXIST")) throw error;
+      if (await existingFile(destination)) return destination;
+      throw error;
     }
     return destination;
   }

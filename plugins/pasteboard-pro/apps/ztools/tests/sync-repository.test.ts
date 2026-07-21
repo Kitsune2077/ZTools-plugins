@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, utimes } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -61,6 +61,13 @@ describe("ZTools sync entity repository", () => {
       expect(stored.id).toMatch(/^blob-[0-9a-f]{64}$/u);
       expect(stored.imagePath.startsWith(root)).toBe(true);
       expect(await readFile(stored.imagePath)).toEqual(Buffer.from([1, 2, 3, 4]));
+      await utimes(stored.imagePath, 1, 1);
+      const duplicate = await repository.storeLocalBlob(
+        new Uint8Array([1, 2, 3, 4]),
+        "image/png",
+      );
+      expect(duplicate).toEqual(stored);
+      expect((await stat(duplicate.imagePath)).mtimeMs).toBe(1_000);
     } finally {
       await rm(root, { recursive: true, force: true });
     }

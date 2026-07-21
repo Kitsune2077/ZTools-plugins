@@ -329,6 +329,11 @@ describe("ZTools clipboard adapter", () => {
       payload: { text: "Edited body" },
     });
     expect(edited.item.payload.revision).not.toBe(created.item.payload.revision);
+    const oversizedUtf8Text = "剪".repeat(Math.floor((10 * 1_024 * 1_024) / 3) + 1);
+    await expect(store.createTextItem(oversizedUtf8Text)).rejects.toThrow("10 MiB");
+    await expect(
+      store.updateTextItem(created.item.id, oversizedUtf8Text),
+    ).rejects.toThrow("10 MiB");
     const renamed = await store.updateItemTitle(created.item.id, "Final title");
     expect(renamed.item.title).toBe("Final title");
     expect(renamed.item.payload.revision).toBe(edited.item.payload.revision);
