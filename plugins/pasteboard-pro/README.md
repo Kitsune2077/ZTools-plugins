@@ -1,89 +1,100 @@
-# PasteboardPro for ATools and ZTools
+# Paste剪切板
 
-PasteboardPro 是 Paste 风格的本地优先剪贴板工作区。本目录包含两套独立 UI：ATools 使用 Svelte，ZTools 使用 Vue 3；两端共享行为契约、设计 token、加密同步协议和测试 fixture，但各自使用宿主原生能力完成捕获、粘贴、窗口和 OCR。
+Paste剪切板是一款 Paste 风格的本地优先剪贴板历史插件。它提供独立贴边浮窗、实时历史、搜索、分组、预览、快捷粘贴与连续粘贴队列，并为 ATools 和 ZTools 分别提供原生宿主实现。
 
-当前状态：**功能实现中，尚未达到可上线门槛。** 源码、类型、单元测试和 ZTools 10k/100k 搜索性能已通过；真实 macOS 双宿主、跨宿主 WebDAV、视觉截图矩阵、原生构建、签名与公证仍待完成。
+> 内部插件 ID、包名和同步协议继续使用 `pasteboard-pro` / `PasteboardPro/v1`，用于保持安装、数据与跨宿主同步兼容；用户界面统一显示“Paste剪切板”。
 
-## 核心能力
+## 界面截图
 
-- 剪贴板历史与结构化类型：文本、富文本、HTML、URL、图片、PDF、颜色和文件。
-- 搜索语法：普通文本以及 `type:`、`app:`、`device:`、`date:`、`pinboard:` 过滤器。
-- Pinboards 创建、重命名、排序、分配与删除。
-- Expanded/Compact 时间线、预览、Quick Look、图片旋转与 OCR。
-- Quick Paste、纯文本粘贴、多选顺序粘贴和 Paste Stack。
-- 新建文本、正文编辑、标题重命名、copy-only 与 direct-paste 路径。
-- 历史天数、blob 预算、应用/内容排除规则和屏幕共享保护。
-- `PasteboardPro/v1` 加密 WebDAV vault、HLC 字段时钟、墓碑与条件 ETag 更新。
-- macOS job 会为已签名 helper 生成包含签名类型、Developer ID/Team ID、Hardened Runtime、Gatekeeper 状态与 SHA-256 的证明文件；最终 ZTools ZIP 会二次解包并要求内置 helper 哈希与该证明一致，同时验证根目录布局、禁止文件、路径穿越、符号链接、内联 source map 与绝对开发机路径。
+![Paste剪切板主界面](./screenshots/main.png)
 
-旧 PasteboardPro 历史、Pinboards 和附件不会迁移；新插件从空 canonical store 开始。
+## 核心功能
+
+- 自动记录文本、富文本、HTML、URL、颜色、图片、PDF 和文件剪贴板内容。
+- 按内容、来源 App、日期、类型和分组搜索历史。
+- 创建、重命名、排序和着色分组，支持拖动内容加入或移出分组。
+- 预览文本、图片与 PDF，支持 Quick Look、图片旋转和 macOS Vision OCR。
+- 使用方向键浏览，按 Enter 粘贴，按 Escape 关闭，支持 `Command + 1–9` 快捷粘贴。
+- 将多项内容加入粘贴队列，关闭面板后连续按 `Command + V` 依次粘贴。
+- 新复制内容实时定位；图片优先加载轻量缩略图，避免阻塞历史列表。
+- 支持紧凑布局和上、下、左、右贴边显示，始终跟随当前鼠标所在屏幕。
+- 提供历史保留、附件预算、敏感内容排除、屏幕共享保护和暂停捕获。
+- 使用端到端加密 WebDAV 同步正文、OCR、分组、图片与 PDF。
+
+## 使用方式
+
+1. 在 ZTools 中搜索 `Paste剪切板`、`剪贴板`、`paste` 或 `clipboard`。
+2. 复制任意内容，历史会按最新时间自动更新。
+3. 使用鼠标、方向键或搜索框定位内容，按 Enter 或点击卡片完成粘贴。
+4. 多选后点击“队列”，即可连续按 `Command + V` 逐项粘贴。
+5. 在设置中选择贴边位置、历史保留策略、附件预算和隐私规则。
+
+## 平台支持
+
+- macOS：完整支持历史捕获、独立贴边浮窗、直接粘贴、Quick Look、Vision OCR、屏幕共享保护和连续粘贴队列。
+- Windows / Linux：支持历史浏览、搜索、分组、复制和元数据预览；macOS 原生能力会安全降级并给出提示。
+- ATools：使用 Svelte UI 与 ATools 原生 bridge。
+- ZTools：使用 Vue 3 UI、Electron preload 与 macOS 原生 helper。
+
+## 隐私与同步
+
+- 历史和附件默认保存在宿主本地数据目录。
+- 隐私规则在正文、OCR 和附件落盘前执行。
+- WebDAV record、blob 和 index 均经过端到端加密。
+- WebDAV 凭据与派生密钥不进入 renderer，本地密钥材料存放于系统钥匙串。
+- 搜索工具仅返回脱敏的结构化元数据，不把 OCR 正文写入 Agent 审计内容。
+
+## 技术实现
+
+- ATools：Svelte 5 + TypeScript。
+- ZTools：Vue 3 + TypeScript + Electron preload。
+- 共享包：查询与选择状态、分组与粘贴队列、设计 token、加密同步协议和跨宿主 fixture。
+- macOS helper：Swift Vision OCR；PR 构建会生成签名与 SHA-256 证明并校验最终 ZIP。
+- 可视化验证：Playwright 覆盖双宿主、四种停靠、明暗主题、紧凑布局、减弱动效及关键功能态。
+
+## 本地开发
+
+```bash
+corepack pnpm@11.7.0 install --frozen-lockfile
+corepack pnpm@11.7.0 --filter @pasteboard-pro/ztools dev
+```
+
+ZTools 开发页面默认由 Vite 启动；ATools 与 ZTools 使用独立 UI，不共享前端框架。
+
+## 验证
+
+CI 使用 Node.js 24 与 pnpm 11.7.0：
+
+```bash
+pnpm typecheck
+pnpm --filter @pasteboard-pro/atools typecheck
+pnpm --filter @pasteboard-pro/ztools typecheck
+pnpm typecheck:visual
+pnpm test:contract
+pnpm test:release-archive
+pnpm test:visual-artifact
+pnpm test:visual-contract
+pnpm test
+pnpm benchmark:search
+pnpm test:visual
+pnpm verify:visual-artifact
+```
+
+PR workflow 还会在 macOS 构建并临时签名 Vision helper、校验 helper 证明、打包插件 ZIP，并上传性能报告、双宿主截图矩阵和最终压缩包验证报告。
 
 ## 目录结构
 
 ```text
-apps/atools/           Svelte 插件 UI 与 ATools bridge adapter
-apps/ztools/           Vue UI、Electron preload、窗口与 macOS helper
-packages/core/         查询、选择、Pinboards、Paste Stack 与数据类型
-packages/design-tokens 停靠、尺寸、颜色和视觉 token
-packages/sync-protocol 加密 wire format、HLC merge 与 vault helpers
-packages/contract-fixtures 跨实现固定 fixture
-scripts/               workspace contract 与性能门禁
+apps/atools/                ATools Svelte UI 与 bridge adapter
+apps/ztools/                ZTools Vue UI、preload、窗口与 macOS helper
+packages/core/              查询、选择、分组、粘贴队列与数据类型
+packages/design-tokens/     停靠、尺寸、颜色和视觉 token
+packages/sync-protocol/     加密 wire format、HLC merge 与 vault helpers
+packages/contract-fixtures/ 跨宿主固定 fixture
+screenshots/                PR 与插件说明截图
+scripts/                    workspace、性能、视觉与发布包门禁
 ```
 
-ATools 的最终数据读写、TaskRun、MCP/Agent 和系统动作位于 ATools Rust runtime；ZTools 的宿主动作位于 `apps/ztools/preload`。Renderer 不直接持有 WebDAV 凭据或派生密钥。
+## 发布边界
 
-## 确定性验证
-
-CI 使用 Node 24 与 pnpm 11.7.0：
-
-```bash
-pnpm install --frozen-lockfile
-pnpm typecheck
-pnpm --filter @pasteboard-pro/atools typecheck
-pnpm --filter @pasteboard-pro/ztools typecheck
-pnpm test
-pnpm benchmark:search
-```
-
-当前已验证结果：
-
-- TypeScript references：pass。
-- Vue typecheck：pass。
-- Svelte check：0 errors / 0 warnings。
-- Vitest：33 files、230/230 tests。
-- ZTools/shared query benchmark 最新隔离运行：10k P95 5.78ms、100k P95 37.57ms，门槛分别为 50ms 与 150ms。
-
-性能 JSON 写入 `artifacts/pasteboardpro/search-performance.json`，PR 与 release workflow 会将其作为 artifact 上传。该报告只覆盖共享/ZTools JavaScript 查询路径，不能代替 ATools SQLite/Rust 搜索基准。
-
-## 隐私与安全边界
-
-- 历史和 blob 默认保存在宿主本地数据目录。
-- WebDAV vault 对 record、blob 和 index 加密；凭据与派生密钥不写入 renderer 可读配置。
-- ATools 与 ZTools 分别使用受限的系统 Keychain 路径保存密钥材料。
-- 隐私规则支持 Bundle ID 排除、literal/wildcard/regex 内容规则和屏幕共享 content protection。
-- Agent 搜索仅返回脱敏结构化元数据；OCR 正文不进入 Agent TaskRun 或 audit payload。
-- Quick Look 使用绝对路径、普通进程参数和启动超时，不通过 shell 拼接命令。
-
-## 平台说明
-
-- macOS 是第一版完整 UI/交互与原生能力验收平台。
-- Windows/Linux 可保留历史浏览、搜索、Pinboards、复制和元数据预览。
-- Vision OCR、Quick Look、Accessibility direct paste、透明浮窗和屏幕共享保护依赖 macOS 原生能力；不支持时必须降级并明确提示。
-
-## 尚未关闭的发布门禁
-
-- Rust 写 → Node 读写 → Rust 读的真实 WebDAV 编排，以及 412、断网、损坏和明文泄漏场景。
-- Expanded/Compact、四种停靠、明暗主题与 reduced-motion 的双宿主截图矩阵。
-- ATools/ZTools 真实激活、捕获、粘贴、OCR、Quick Look、Paste Stack 与多屏 smoke。
-- ATools SQLite/Rust 10k/100k 搜索基准。
-- Rust/Swift/Vite 原生 CI、helper Developer ID 签名、Apple 公证和 assembled ZIP 内容验证。
-
-最终 ZIP 内容验证器和 PR/release workflow 接线已经实现；实际发布门禁仍需当前分支远程构建生成 `pasteboardpro-archive-verification.json`，且 Developer ID/helper 公证步骤成功后才能关闭。
-
-在这些门禁全部有真实 artifact 前，不应把插件标记为 release-ready。
-
-ATools 仓库已提供专用 `PasteboardPro Cross-Host Acceptance` workflow。它会签出匹配的 ZTools ref，使用真实 Rust `sync_pasteboard_vault` 与本目录的 `syncZToolsVault` runtime 运行双向编排；只有远程 artifact `cross-host-sync.json` 生成且全部断言通过后，第一项门禁才能关闭。
-
-ATools CI 同时已提供独立 `pasteboardpro-search-performance` job，使用真实 SQLite/Rust 搜索路径生成 `atools-search-performance.json`；该 artifact 通过后才能关闭 ATools 性能门禁。
-
-本 workspace 已提供 Playwright 双宿主视觉矩阵：32 种停靠/主题/密度/动效组合会为 ATools 与 ZTools 各截图一次，另覆盖 search、Pinboard、Preview 和 Paste Stack 功能态，总计 72 张图片。独立 artifact 校验器会再次确认 72 个文件真实存在、两端各 36 张、32 组矩阵和 4 组功能态均成对、贴边圆角/viewport/reduced-motion/跨宿主几何证据完整。PR/release workflow 会在校验通过后上传 `visual-matrix.json`、截图、trace 和 Playwright JSON report；只有 artifact 生成并完成人工审核后，视觉门禁才能关闭。
+插件保持本地优先且核心浏览、搜索、分组和复制能力不依赖模型、账号或网络。远程 PR 构建与视觉 artifact 全部通过后，才应将对应提交标记为可发布版本。
