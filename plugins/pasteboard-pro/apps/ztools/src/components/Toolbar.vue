@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import type { DockEdge } from "@pasteboard-pro/design-tokens";
+
 import SearchBar from "./SearchBar.vue";
 
 defineProps<{
   query: string;
   paused: boolean;
   compact: boolean;
+  edge: DockEdge;
 }>();
 
 const emit = defineEmits<{
@@ -19,10 +22,10 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <header class="toolbar">
-    <div class="brand" aria-label="PasteboardPro">
-      <span class="brand__lens" aria-hidden="true"></span>
-      <span>PasteboardPro</span>
+  <header class="toolbar" :class="{ 'toolbar--vertical': edge === 'left' || edge === 'right' }">
+    <div class="brand" aria-label="Paste剪切板">
+      <img class="brand__logo" src="/logo.png" alt="" />
+      <span>Paste剪切板</span>
     </div>
     <SearchBar :model-value="query" @update:model-value="emit('update:query', $event)" />
     <div class="toolbar__actions">
@@ -39,11 +42,11 @@ const emit = defineEmits<{
       <button
         type="button"
         class="tool-button"
-        title="将选择加入 Paste Stack（Shift-Command-C）"
+        title="将选择加入连续粘贴队列（Shift-Command-C）"
         @click="emit('addStack')"
       >
         <span aria-hidden="true">≋</span>
-        Stack
+        队列
       </button>
       <button
         type="button"
@@ -98,12 +101,11 @@ const emit = defineEmits<{
   letter-spacing: -0.01em;
 }
 
-.brand__lens {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--pb-violet);
-  box-shadow: 0 0 0 5px color-mix(in srgb, var(--pb-violet) 14%, transparent);
+.brand__logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--pb-violet) 20%, transparent);
 }
 
 .toolbar__actions {
@@ -138,13 +140,32 @@ const emit = defineEmits<{
   color: #9b5410;
 }
 
+.toolbar--vertical {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  padding: 13px 12px 11px;
+}
+
+.toolbar--vertical .toolbar__actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.toolbar--vertical .tool-button {
+  min-width: 0;
+  padding: 0 7px;
+  justify-content: center;
+  font-size: 10px;
+}
+
 @media (max-width: 760px) {
   .toolbar {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .brand span:last-child,
-  .toolbar__actions .tool-button:nth-child(-n + 2) {
+  .toolbar:not(.toolbar--vertical) .brand span:last-child,
+  .toolbar:not(.toolbar--vertical) .toolbar__actions .tool-button:nth-child(-n + 2) {
     display: none;
   }
 }

@@ -1,11 +1,11 @@
 {
   "name": "pasteboard-pro-atools",
-  "title": "PasteboardPro",
-  "description": "Paste 风格的本地剪贴板历史、Pinboards、预览与 Paste Stack",
-  "author": "TheLastSheep",
+  "title": "Paste剪切板",
+  "description": "Paste 风格的本地剪贴板历史、分组、预览与连续粘贴队列",
+  "author": "harris",
   "version": "1.0.0",
   "main": "index.html",
-  "logo": "logo.svg",
+  "logo": "logo.png",
   "permissions": [
     "pasteboard.read",
     "pasteboard.write",
@@ -16,9 +16,9 @@
   "features": [
     {
       "code": "pasteboard-pro-atools",
-      "explain": "打开 PasteboardPro 剪贴板时间线",
-      "icon": "logo.svg",
-      "cmds": ["剪贴板", "PasteboardPro", "paste", "clipboard"]
+      "explain": "打开 Paste剪切板时间线",
+      "icon": "logo.png",
+      "cmds": ["Paste剪切板", "剪贴板", "PasteboardPro", "paste", "clipboard"]
     }
   ]
 }

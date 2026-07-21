@@ -4,7 +4,7 @@
 </script>
 
 {#if state.itemIds.length > 0}
-  <div class="stack" role="status"><span class="layers" aria-hidden="true"></span><strong>Paste Stack</strong><span>{state.itemIds.length} 项 · {state.direction === "forward" ? "正序" : "倒序"}</span><button type="button" onclick={ontoggle}>切换</button><button type="button" onclick={onclear}>清空</button></div>
+  <div class="stack" role="status"><span class="layers" aria-hidden="true"></span><strong>粘贴队列</strong><span>{state.itemIds.length} 项 · {state.direction === "forward" ? "正序" : "倒序"}</span><button type="button" onclick={ontoggle}>切换</button><button type="button" onclick={onclear}>清空</button></div>
 {/if}
 
 <style>

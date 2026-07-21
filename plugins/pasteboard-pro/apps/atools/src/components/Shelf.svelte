@@ -37,12 +37,12 @@
   } = $props();
 </script>
 
-<section class:compact class="shelf" class:shelf--bottom={dockEdge === "bottom"} class:shelf--left={dockEdge === "left"} class:shelf--right={dockEdge === "right"} aria-label="PasteboardPro">
+<section class:compact class="shelf" class:shelf--bottom={dockEdge === "bottom"} class:shelf--left={dockEdge === "left"} class:shelf--right={dockEdge === "right"} aria-label="Paste剪切板">
   <div class="sheen" aria-hidden="true"></div>
   <button
     type="button"
     class="drag-handle"
-    aria-label="拖动 PasteboardPro 面板"
+    aria-label="拖动 Paste剪切板面板"
     title="拖动到屏幕边缘可吸附"
     onpointerdown={(event) => {
       if (event.button !== 0) return;

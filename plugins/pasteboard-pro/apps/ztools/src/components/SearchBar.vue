@@ -11,9 +11,10 @@ const emit = defineEmits<{ "update:modelValue": [value: string] }>();
     </svg>
     <span class="visually-hidden">搜索剪贴板历史</span>
     <input
+      data-pb-search
       :value="modelValue"
       type="search"
-      placeholder="搜索内容、来源 App、日期或 Pinboard"
+      placeholder="搜索内容、来源 App、日期或分组"
       autocomplete="off"
       @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
     />

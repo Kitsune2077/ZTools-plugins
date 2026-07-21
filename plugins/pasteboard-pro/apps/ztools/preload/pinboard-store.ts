@@ -7,7 +7,10 @@ import {
 } from "@pasteboard-pro/core";
 import type { Tombstone } from "@pasteboard-pro/sync-protocol";
 
-import type { ZToolsDocumentDatabase } from "./clipboard-store";
+import {
+  documentsFromAllDocs,
+  type ZToolsDocumentDatabase,
+} from "./clipboard-store";
 
 export type PinboardStoreOptions = Readonly<{
   deviceId: string;
@@ -85,13 +88,12 @@ export class ZToolsPinboardStore {
       startkey: PINBOARD_PREFIX,
       endkey: `${PINBOARD_PREFIX}\uffff`,
     });
-    if (!isRecord(result) || !Array.isArray(result.rows)) {
-      throw new TypeError("ZTools database returned invalid Pinboard rows");
-    }
-    return result.rows
-      .flatMap((row) => {
-        if (!isRecord(row)) return [];
-        const pinboard = pinboardFromDocument(row.doc);
+    return documentsFromAllDocs(
+      result,
+      "ZTools database returned invalid Pinboard rows",
+    )
+      .flatMap((document) => {
+        const pinboard = pinboardFromDocument(document);
         return pinboard === undefined ? [] : [pinboard];
       })
       .sort((left, right) => compareStableOrder(left, right));

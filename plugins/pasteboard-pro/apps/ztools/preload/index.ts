@@ -8,6 +8,7 @@ import {
   type HostClipboardApi,
   type ZToolsDocumentDatabase,
 } from "./clipboard-store";
+import type { PasteStackState } from "@pasteboard-pro/core";
 import { createOcrClient } from "./ocr";
 import { openQuickLook } from "./quick-look";
 import { rotateImageFile } from "./image-rotation";
@@ -26,6 +27,15 @@ import {
   type PrivacySettings,
 } from "./privacy";
 import { ZToolsPinboardStore } from "./pinboard-store";
+import {
+  createZToolsGlobalPasteHook,
+  PasteStackRuntime,
+  type ClipboardWriter,
+} from "./paste-stack-runtime";
+import {
+  normalizePasteStackState,
+  ZToolsPasteStackStore,
+} from "./paste-stack-store";
 import { executeRetentionPrune } from "./retention";
 import { runConfiguredVaultSync } from "./sync-controller";
 import {
@@ -36,11 +46,37 @@ import { ZToolsSyncStore, type SyncSettings } from "./sync-store";
 import { ZToolsSyncEntityRepository } from "./sync-repository";
 import { createSearchHistoryHandler } from "./tools";
 import {
+  ThumbnailService,
+  type ItemThumbnail,
+  type NativeImageApi,
+} from "./thumbnail";
+import {
+  ZToolsWindowPreferencesStore,
+  type ShelfDockEdge,
+  type WindowPreferences,
+} from "./window-preferences";
+import {
+  PanelWindowManager,
   ShelfWindowManager,
+  type AuxiliaryPanel,
   type BrowserWindowHandle,
   type BrowserWindowOptions,
+  type PanelRequest,
   type ShelfDisplay,
 } from "./window";
+
+type IpcRendererLike = Readonly<{
+  on(
+    channel: string,
+    listener: (event: unknown, ...args: unknown[]) => void,
+  ): void;
+}>;
+
+const { clipboard, ipcRenderer, nativeImage } = require("electron") as {
+  clipboard: ClipboardWriter;
+  ipcRenderer: IpcRendererLike;
+  nativeImage: NativeImageApi;
+};
 
 type ZToolsDisplay = Readonly<{
   id: string | number;
@@ -72,6 +108,9 @@ type ZToolsHost = Readonly<{
     onReady?: () => void,
   ): BrowserWindowHandle;
   hideMainWindow(restorePreviousWindow?: boolean): void;
+  outPlugin(): void;
+  simulateKeyboardTap?(key: string, ...modifiers: string[]): unknown;
+  sendToParent?(channel: string, ...args: unknown[]): void;
 }>;
 
 type PasteboardProBridge = Readonly<{
@@ -82,6 +121,7 @@ type PasteboardProBridge = Readonly<{
   pasteHostItem(hostItemId: string): Promise<DirectPasteResult>;
   pasteContent(content: ClipboardWriteContent): Promise<DirectPasteResult>;
   pasteItem(itemId: string, plainText?: boolean): Promise<DirectPasteResult>;
+  pasteStackItem(itemId: string, plainText?: boolean): Promise<DirectPasteResult>;
   copyItem(itemId: string, plainText?: boolean): Promise<void>;
   createTextItem(text: string, title?: string): Promise<unknown>;
   updateTextItem(itemId: string, text: string, title?: string): Promise<unknown>;
@@ -103,12 +143,18 @@ type PasteboardProBridge = Readonly<{
     pinboardId: string | undefined,
   ): Promise<unknown[]>;
   getItemPreview(itemId: string): Promise<Readonly<{ mediaType: string; dataBase64: string }> | null>;
+  getItemThumbnails(itemIds: readonly string[]): Promise<ItemThumbnail[]>;
   recognizeItem(itemId: string): Promise<string>;
   rotateImage(itemId: string, quarterTurns: -1 | 1): Promise<unknown>;
   quickLookItem(itemId: string): Promise<void>;
   getSyncSettings(): Promise<SyncSettings>;
   saveSyncSettings(input: SaveSyncConfigurationInput): Promise<SyncSettings>;
   retrySync(): Promise<SyncSettings>;
+  getWindowPreferences(): Promise<WindowPreferences>;
+  saveWindowPreferences(settings: WindowPreferences): Promise<WindowPreferences>;
+  getPasteStack(): Promise<PasteStackState>;
+  savePasteStack(state: PasteStackState): Promise<PasteStackState>;
+  openPanel(panel: AuxiliaryPanel, params?: Readonly<Record<string, string>>): void;
 }>;
 
 const host = (window as Window & { ztools?: ZToolsHost }).ztools;
@@ -118,12 +164,16 @@ if (host === undefined) {
 }
 
 const ztools: ZToolsHost = host;
-const isShelfWindow =
-  new URLSearchParams(window.location.search).get("shelf") === "1";
+const windowParams = new URLSearchParams(window.location.search);
+const isShelfWindow = windowParams.get("shelf") === "1";
+const isPanelWindow = windowParams.has("panel");
+const isPrimaryWindow = !isShelfWindow && !isPanelWindow;
 const store = new ZToolsCanonicalClipboardStore(ztools.db.promises, {
   deviceId: ztools.getNativeId(),
 });
 const privacyStore = new ZToolsPrivacySettingsStore(ztools.db.promises);
+const windowPreferencesStore = new ZToolsWindowPreferencesStore(ztools.db.promises);
+const pasteStackStore = new ZToolsPasteStackStore(ztools.db.promises);
 const pinboardStore = new ZToolsPinboardStore(ztools.db.promises, {
   deviceId: ztools.getNativeId(),
 });
@@ -134,15 +184,38 @@ const syncRepository = new ZToolsSyncEntityRepository(
   ztools.getNativeId(),
 );
 const shelfWindows = new ShelfWindowManager(ztools);
+const panelWindows = new PanelWindowManager(ztools);
+const thumbnailService = new ThumbnailService(store, nativeImage);
 const ocrClient = createOcrClient({
   helperPath: path.join(__dirname, "pasteboard-vision"),
 });
 let synchronization = Promise.resolve();
 let vaultSynchronization: Promise<SyncSettings> | undefined;
 let vaultSyncRequested = false;
+let shelfActivation = Promise.resolve();
 let shelfRefreshTimer: number | undefined;
 let lastRetentionRun = 0;
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1_000;
+const PANEL_REQUEST_CHANNEL = "pasteboard-pro:open-panel";
+const SCREEN_PROTECTION_CHANNEL = "pasteboard-pro:set-screen-protection";
+const SHELF_EDGE_CHANNEL = "pasteboard-pro:set-shelf-edge";
+const HISTORY_CHANGED_CHANNEL = "pasteboard-pro:history-changed";
+const PASTE_STACK_CHANGED_CHANNEL = "pasteboard-pro:paste-stack-changed";
+const PASTE_STACK_DIRECT_PASTE_CHANNEL = "pasteboard-pro:paste-stack-direct-paste";
+
+const pasteStackRuntime = isPrimaryWindow
+  ? new PasteStackRuntime(
+      pasteStackStore,
+      store,
+      clipboard,
+      nativeImage,
+      createZToolsGlobalPasteHook({
+        simulatePaste: () => ztools.simulateKeyboardTap?.("v", "meta"),
+      }),
+      (state) => shelfWindows.notifyPasteStackChanged(state),
+      () => !shelfWindows.isOpen(),
+    )
+  : undefined;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -178,6 +251,67 @@ function activeDisplay(): ShelfDisplay {
   return { id: display.id, workArea: { ...display.workArea } };
 }
 
+function applyShelfContentProtection(enabled: boolean): void {
+  if (isPrimaryWindow) {
+    shelfWindows.setContentProtection(enabled);
+    return;
+  }
+  if (ztools.sendToParent !== undefined) {
+    ztools.sendToParent(SCREEN_PROTECTION_CHANNEL, enabled);
+    return;
+  }
+  shelfWindows.setContentProtection(enabled);
+}
+
+function isShelfDockEdge(value: unknown): value is ShelfDockEdge {
+  return value === "top" || value === "bottom" || value === "left" || value === "right";
+}
+
+function parsedPanelRequest(value: unknown): PanelRequest | undefined {
+  if (!isRecord(value)) return undefined;
+  const panel = value.panel;
+  if (
+    panel !== "privacy" &&
+    panel !== "sync" &&
+    panel !== "preview" &&
+    panel !== "editor"
+  ) return undefined;
+  if (value.params === undefined) return { panel };
+  if (
+    !isRecord(value.params) ||
+    !Object.values(value.params).every((entry) => typeof entry === "string")
+  ) return undefined;
+  return { panel, params: value.params as Record<string, string> };
+}
+
+async function repositionShelf(edge: ShelfDockEdge): Promise<void> {
+  const privacy = await privacyStore.get();
+  shelfWindows.open(activeDisplay(), {
+    edge,
+    contentProtection: privacy.screenShareProtection,
+  });
+}
+
+function requestShelfEdge(edge: ShelfDockEdge): void {
+  if (isPrimaryWindow) {
+    void repositionShelf(edge).catch(reportSynchronizationError);
+    return;
+  }
+  if (ztools.sendToParent !== undefined) {
+    ztools.sendToParent(SHELF_EDGE_CHANNEL, edge);
+  }
+}
+
+function broadcastHistoryChanged(): void {
+  thumbnailService.invalidateRecordIndex();
+  window.dispatchEvent(new CustomEvent(HISTORY_CHANGED_CHANNEL));
+  if (isPrimaryWindow) {
+    shelfWindows.notifyHistoryChanged();
+    return;
+  }
+  ztools.sendToParent?.(HISTORY_CHANGED_CHANNEL);
+}
+
 function reportSynchronizationError(error: unknown): void {
   window.dispatchEvent(
     new CustomEvent("pasteboard-pro:sync-error", {
@@ -201,7 +335,7 @@ function scheduleVaultSync(): Promise<SyncSettings> {
       window.dispatchEvent(
         new CustomEvent("pasteboard-pro:vault-synced", { detail: settings }),
       );
-      window.dispatchEvent(new CustomEvent("pasteboard-pro:history-changed"));
+      broadcastHistoryChanged();
     } while (vaultSyncRequested);
     return settings;
   })().finally(() => {
@@ -250,6 +384,7 @@ function scheduleHistoryMirror(): void {
             privacy.rules,
           ),
       });
+      thumbnailService.invalidateRecordIndex();
       window.dispatchEvent(
         new CustomEvent("pasteboard-pro:history-mirrored", { detail: result }),
       );
@@ -259,19 +394,53 @@ function scheduleHistoryMirror(): void {
     .catch(reportSynchronizationError);
 }
 
-if (!isShelfWindow) {
+if (isPrimaryWindow) {
+  ipcRenderer.on(PANEL_REQUEST_CHANNEL, (_event, value) => {
+    const request = parsedPanelRequest(value);
+    if (request !== undefined) panelWindows.open(activeDisplay(), request);
+  });
+  ipcRenderer.on(SCREEN_PROTECTION_CHANNEL, (_event, enabled) => {
+    if (typeof enabled === "boolean") {
+      shelfWindows.setContentProtection(enabled);
+    }
+  });
+  ipcRenderer.on(SHELF_EDGE_CHANNEL, (_event, edge) => {
+    if (isShelfDockEdge(edge)) {
+      void repositionShelf(edge).catch(reportSynchronizationError);
+    }
+  });
+  ipcRenderer.on(HISTORY_CHANGED_CHANNEL, () => {
+    shelfWindows.notifyHistoryChanged();
+  });
+  ipcRenderer.on(PASTE_STACK_CHANGED_CHANNEL, (_event, value) => {
+    void pasteStackRuntime
+      ?.replace(normalizePasteStackState(value), false)
+      .catch(reportSynchronizationError);
+  });
+  ipcRenderer.on(PASTE_STACK_DIRECT_PASTE_CHANNEL, (_event, phase) => {
+    if (phase === "begin") pasteStackRuntime?.beginDirectPaste();
+    else if (phase === "end") pasteStackRuntime?.endDirectPaste();
+  });
+
+  void pasteStackRuntime?.initialize().catch(reportSynchronizationError);
+
   ztools.onPluginEnter((parameter) => {
+    ztools.hideMainWindow(false);
     window.dispatchEvent(
       new CustomEvent("pasteboard-pro:host-enter", { detail: parameter }),
     );
     scheduleHistoryMirror();
-    void privacyStore
-      .get()
-      .then((settings) => {
-        shelfWindows.open(activeDisplay(), {
-          edge: "bottom",
+    shelfActivation = shelfActivation
+      .then(async () => {
+        const [settings, windowPreferences] = await Promise.all([
+          privacyStore.get(),
+          windowPreferencesStore.get(),
+        ]);
+        shelfWindows.toggle(activeDisplay(), {
+          edge: windowPreferences.dockEdge,
           contentProtection: settings.screenShareProtection,
         });
+        ztools.outPlugin();
       })
       .catch(reportSynchronizationError);
   });
@@ -286,8 +455,9 @@ if (!isShelfWindow) {
     },
     "搜索剪贴板历史",
   );
-} else {
+} else if (isShelfWindow) {
   ztools.clipboard.onChange(() => {
+    thumbnailService.invalidateRecordIndex();
     if (shelfRefreshTimer !== undefined) {
       window.clearTimeout(shelfRefreshTimer);
     }
@@ -298,7 +468,7 @@ if (!isShelfWindow) {
   });
 }
 
-if (!isShelfWindow) {
+if (isPrimaryWindow) {
   ztools.registerTool("search_history", createSearchHistoryHandler(store));
 }
 
@@ -308,7 +478,7 @@ const bridge: PasteboardProBridge = {
   getPrivacySettings: () => privacyStore.get(),
   async savePrivacySettings(settings) {
     await privacyStore.put(settings);
-    shelfWindows.setContentProtection(settings.screenShareProtection);
+    applyShelfContentProtection(settings.screenShareProtection);
     return privacyStore.get();
   },
   async setCapturePause(pause) {
@@ -328,6 +498,18 @@ const bridge: PasteboardProBridge = {
     }
     return pasteCanonicalRecord(record, ztools.clipboard, plainText);
   },
+  async pasteStackItem(itemId, plainText = false) {
+    ztools.sendToParent?.(PASTE_STACK_DIRECT_PASTE_CHANNEL, "begin");
+    try {
+      const record = await store.findRecordByItemId(itemId);
+      if (record === undefined) {
+        throw new RangeError("Clipboard item no longer exists");
+      }
+      return await pasteCanonicalRecord(record, ztools.clipboard, plainText);
+    } finally {
+      ztools.sendToParent?.(PASTE_STACK_DIRECT_PASTE_CHANNEL, "end");
+    }
+  },
   async copyItem(itemId, plainText = false) {
     const record = await store.findRecordByItemId(itemId);
     if (record === undefined) {
@@ -338,19 +520,19 @@ const bridge: PasteboardProBridge = {
   async createTextItem(text, title) {
     const record = await store.createTextItem(text, title);
     void scheduleVaultSync().catch(reportSynchronizationError);
-    window.dispatchEvent(new CustomEvent("pasteboard-pro:history-changed"));
+    broadcastHistoryChanged();
     return record.item;
   },
   async updateTextItem(itemId, text, title) {
     const record = await store.updateTextItem(itemId, text, title);
     void scheduleVaultSync().catch(reportSynchronizationError);
-    window.dispatchEvent(new CustomEvent("pasteboard-pro:history-changed"));
+    broadcastHistoryChanged();
     return record.item;
   },
   async updateItemTitle(itemId, title) {
     const record = await store.updateItemTitle(itemId, title);
     void scheduleVaultSync().catch(reportSynchronizationError);
-    window.dispatchEvent(new CustomEvent("pasteboard-pro:history-changed"));
+    broadcastHistoryChanged();
     return record.item;
   },
   listPinboards: () => pinboardStore.list(),
@@ -415,6 +597,7 @@ const bridge: PasteboardProBridge = {
     }
     return { mediaType, dataBase64: bytes.toString("base64") };
   },
+  getItemThumbnails: (itemIds) => thumbnailService.get(itemIds),
   async recognizeItem(itemId) {
     if (process.platform !== "darwin") {
       throw new Error("本地 Vision OCR 仅支持 macOS");
@@ -427,6 +610,7 @@ const bridge: PasteboardProBridge = {
     const text = await ocrClient.recognize(imagePath);
     await store.updateOcrText(itemId, text);
     void scheduleVaultSync().catch(reportSynchronizationError);
+    broadcastHistoryChanged();
     return text;
   },
   async rotateImage(itemId, quarterTurns) {
@@ -454,6 +638,7 @@ const bridge: PasteboardProBridge = {
         mediaType: "image/png",
       });
       void scheduleVaultSync().catch(reportSynchronizationError);
+      broadcastHistoryChanged();
       return updated.item;
     } finally {
       await rm(destinationPath, { force: true });
@@ -477,6 +662,37 @@ const bridge: PasteboardProBridge = {
     return settings.enabled ? await scheduleVaultSync() : settings;
   },
   retrySync: () => scheduleVaultSync(),
+  getWindowPreferences: () => windowPreferencesStore.get(),
+  async saveWindowPreferences(settings) {
+    await windowPreferencesStore.put(settings);
+    requestShelfEdge(settings.dockEdge);
+    return windowPreferencesStore.get();
+  },
+  getPasteStack: () => pasteStackStore.get(),
+  async savePasteStack(state) {
+    const saved = await pasteStackStore.put(state);
+    if (isPrimaryWindow) {
+      await pasteStackRuntime?.replace(saved, false);
+    } else {
+      ztools.sendToParent?.(PASTE_STACK_CHANGED_CHANNEL, saved);
+    }
+    return saved;
+  },
+  openPanel(panel, params) {
+    const request: PanelRequest = {
+      panel,
+      ...(params === undefined ? {} : { params }),
+    };
+    if (isPrimaryWindow) {
+      panelWindows.open(activeDisplay(), request);
+      return;
+    }
+    if (ztools.sendToParent !== undefined) {
+      ztools.sendToParent(PANEL_REQUEST_CHANNEL, request);
+      return;
+    }
+    panelWindows.open(activeDisplay(), request);
+  },
 };
 
 (window as Window & { pasteboardPro?: PasteboardProBridge }).pasteboardPro = bridge;

@@ -6,6 +6,7 @@ import path from "node:path";
 import { mergeEntity, type Tombstone } from "@pasteboard-pro/sync-protocol";
 
 import {
+  documentsFromAllDocs,
   ZToolsCanonicalClipboardStore,
   type ZToolsDocumentDatabase,
 } from "./clipboard-store";
@@ -92,12 +93,12 @@ export class ZToolsSyncEntityRepository implements SyncEntityRepository {
       startkey: TOMBSTONE_PREFIX,
       endkey: `${TOMBSTONE_PREFIX}\uffff`,
     });
-    if (!isRecord(result) || !Array.isArray(result.rows)) {
-      throw new TypeError("ZTools database returned invalid tombstone rows");
-    }
-    return result.rows.flatMap((row) =>
-      isRecord(row) && parsedTombstone(row.doc) !== undefined
-        ? [parsedTombstone(row.doc)!]
+    return documentsFromAllDocs(
+      result,
+      "ZTools database returned invalid tombstone rows",
+    ).flatMap((document) =>
+      parsedTombstone(document) !== undefined
+        ? [parsedTombstone(document)!]
         : [],
     );
   }

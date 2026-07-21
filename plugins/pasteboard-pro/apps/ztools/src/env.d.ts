@@ -8,6 +8,8 @@ import type {
 } from "../preload/privacy";
 import type { SaveSyncConfigurationInput } from "../preload/sync-config";
 import type { SyncSettings } from "../preload/sync-store";
+import type { WindowPreferences } from "../preload/window-preferences";
+import type { PasteStackState } from "@pasteboard-pro/core";
 
 declare global {
   interface Window {
@@ -22,6 +24,7 @@ declare global {
       pasteHostItem(hostItemId: string): Promise<DirectPasteResult>;
       pasteContent(content: ClipboardWriteContent): Promise<DirectPasteResult>;
       pasteItem(itemId: string, plainText?: boolean): Promise<DirectPasteResult>;
+      pasteStackItem(itemId: string, plainText?: boolean): Promise<DirectPasteResult>;
       copyItem(itemId: string, plainText?: boolean): Promise<void>;
       createTextItem(text: string, title?: string): Promise<unknown>;
       updateTextItem(itemId: string, text: string, title?: string): Promise<unknown>;
@@ -41,12 +44,25 @@ declare global {
         pinboardId: string | undefined,
       ): Promise<unknown[]>;
       getItemPreview(itemId: string): Promise<{ mediaType: string; dataBase64: string } | null>;
+      getItemThumbnails(itemIds: readonly string[]): Promise<Array<{
+        itemId: string;
+        mediaType: string;
+        dataBase64: string;
+      }>>;
       recognizeItem(itemId: string): Promise<string>;
       rotateImage(itemId: string, quarterTurns: -1 | 1): Promise<unknown>;
       quickLookItem(itemId: string): Promise<void>;
       getSyncSettings(): Promise<SyncSettings>;
       saveSyncSettings(input: SaveSyncConfigurationInput): Promise<SyncSettings>;
       retrySync(): Promise<SyncSettings>;
+      getWindowPreferences(): Promise<WindowPreferences>;
+      saveWindowPreferences(settings: WindowPreferences): Promise<WindowPreferences>;
+      getPasteStack(): Promise<PasteStackState>;
+      savePasteStack(state: PasteStackState): Promise<PasteStackState>;
+      openPanel(
+        panel: "privacy" | "sync" | "preview" | "editor",
+        params?: Readonly<Record<string, string>>,
+      ): void;
     }>;
   }
 }

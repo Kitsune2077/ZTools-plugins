@@ -59,7 +59,7 @@ for (const dock of docks) {
 }
 
 for (const host of hosts) {
-  test(`${host} search, Pinboard, preview, and Paste Stack states`, async ({ browser }) => {
+  test(`${host} search, group, preview, and paste queue states`, async ({ browser }) => {
     const { page, errors } = await visualPage(browser, host, "bottom", "dark", "full");
     const search = page.getByRole("searchbox");
 
@@ -82,8 +82,8 @@ for (const host of hosts) {
 
     const first = page.getByRole("option").first();
     await first.click();
-    await page.getByTitle(/Paste Stack/).click();
-    await expect(page.getByRole("status")).toContainText("Paste Stack");
+    await page.getByTitle(/粘贴队列/).click();
+    await expect(page.getByRole("status")).toContainText("粘贴队列");
     await captureNamedState(page, host, "paste-stack", errors);
 
     expect(errors).toEqual([]);
@@ -125,7 +125,7 @@ async function captureMatrixState(
     await expect(page.getByTitle("切换紧凑模式")).toHaveAttribute("aria-pressed", "true");
   }
   await settle(page);
-  const shelf = page.getByLabel("PasteboardPro").filter({ has: page.getByRole("option") }).first();
+  const shelf = page.getByLabel("Paste剪切板").filter({ has: page.getByRole("option") }).first();
   const box = await shelf.boundingBox();
   assertBox(box);
   const viewport = viewportFor(options.dock);
@@ -167,7 +167,7 @@ async function captureNamedState(
   errors: string[],
 ): Promise<void> {
   await settle(page);
-  const shelf = page.getByLabel("PasteboardPro").filter({ has: page.getByRole("option") }).first();
+  const shelf = page.getByLabel("Paste剪切板").filter({ has: page.getByRole("option") }).first();
   const box = await shelf.boundingBox();
   assertBox(box);
   const screenshot = `${host}/${state}.png`;
@@ -208,7 +208,7 @@ async function visualPage(
   const errors = collectConsoleErrors(page);
   const port = host === "atools" ? 5180 : 5179;
   await page.goto(`http://127.0.0.1:${port}/?visual=1&dock=${dock}`, { waitUntil: "networkidle" });
-  await expect(page.getByLabel("PasteboardPro").first()).toBeVisible();
+  await expect(page.getByLabel("Paste剪切板").first()).toBeVisible();
   await expect(page.getByRole("option")).toHaveCount(5);
   return { page, errors };
 }

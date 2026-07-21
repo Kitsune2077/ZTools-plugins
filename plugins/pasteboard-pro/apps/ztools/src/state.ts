@@ -225,6 +225,10 @@ export class PasteboardState {
     this.pasteStack = reducePasteStack(this.pasteStack, action);
   }
 
+  setPasteStack(pasteStack: PasteStackState): void {
+    this.pasteStack = clonePasteStack(pasteStack);
+  }
+
   setDockEdge(edge: DockEdge): void {
     this.dockEdge = edge;
   }

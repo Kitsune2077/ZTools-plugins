@@ -315,7 +315,7 @@ describe("ZTools clipboard adapter", () => {
       kind: "text",
       title: "Draft title",
       payload: { text: "Draft body" },
-      sourceApp: { name: "PasteboardPro" },
+      sourceApp: { name: "Paste剪切板" },
     });
     const captureFingerprint = created.item.contentFingerprint;
     const edited = await store.updateTextItem(
@@ -332,5 +332,33 @@ describe("ZTools clipboard adapter", () => {
     const renamed = await store.updateItemTitle(created.item.id, "Final title");
     expect(renamed.item.title).toBe("Final title");
     expect(renamed.item.payload.revision).toBe(edited.item.payload.revision);
+  });
+
+  it("accepts ZTools native allDocs arrays", async () => {
+    const record = normalizeHostClipboardItem(hostItems[0], "ztools-device");
+    expect(record).not.toBeNull();
+    const document = {
+      _id: `pasteboard-pro:record:${record!.item.contentFingerprint}`,
+      _rev: "1-native",
+      type: "pasteboard-pro-record",
+      record,
+    };
+    const store = new ZToolsCanonicalClipboardStore({
+      async get(id) {
+        if (id !== document._id) throw { status: 404 };
+        return structuredClone(document);
+      },
+      async put() {
+        return { ok: true };
+      },
+      async allDocs() {
+        return [structuredClone(document)];
+      },
+    });
+
+    await expect(store.search("roadmap", 10)).resolves.toMatchObject({
+      total: 1,
+      items: [{ id: "ztools:text-1" }],
+    });
   });
 });

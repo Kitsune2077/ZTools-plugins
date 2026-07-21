@@ -177,7 +177,7 @@
       await load();
       activePinboardId = created.id;
       await load();
-      status = `已创建 Pinboard：${created.name}`;
+      status = `已创建分组：${created.name}`;
     } catch (error) {
       status = error instanceof Error ? error.message : String(error);
     }
@@ -187,7 +187,7 @@
     try {
       await atoolsPasteboard.renamePinboard(id, name);
       await load();
-      status = `已重命名为 ${name}`;
+      status = `已重命名分组：${name}`;
     } catch (error) {
       status = error instanceof Error ? error.message : String(error);
     }
@@ -197,7 +197,7 @@
     try {
       await atoolsPasteboard.updatePinboard(id, { color });
       await load();
-      status = "已更新 Pinboard 颜色";
+      status = "已更新分组颜色";
     } catch (error) {
       status = error instanceof Error ? error.message : String(error);
     }
@@ -214,7 +214,7 @@
     try {
       await atoolsPasteboard.movePinboard(id, beforeId, afterId);
       await load();
-      status = "已调整 Pinboard 顺序";
+      status = "已调整分组顺序";
     } catch (error) {
       status = error instanceof Error ? error.message : String(error);
     }
@@ -222,12 +222,12 @@
 
   async function deletePinboard(id: string) {
     const pinboard = pinboards.find((candidate) => candidate.id === id);
-    if (pinboard === undefined || !window.confirm(`删除 Pinboard“${pinboard.name}”？其中内容会保留在全部历史。`)) return;
+    if (pinboard === undefined || !window.confirm(`删除分组“${pinboard.name}”？其中内容会保留在全部历史。`)) return;
     try {
       const result = await atoolsPasteboard.deletePinboard(id);
       if (activePinboardId === id) activePinboardId = undefined;
       await load();
-      status = `已删除 Pinboard，保留 ${result.unassignedItems} 项历史`;
+      status = `已删除分组，保留 ${result.unassignedItems} 项历史`;
     } catch (error) {
       status = error instanceof Error ? error.message : String(error);
     }
@@ -238,7 +238,7 @@
     try {
       await atoolsPasteboard.assignItems(itemIds, pinboardId);
       await load();
-      status = pinboardId === undefined ? "已移出 Pinboard" : `已移动 ${itemIds.length} 项`;
+      status = pinboardId === undefined ? "已移出分组" : `已移动 ${itemIds.length} 项`;
     } catch (error) {
       status = error instanceof Error ? error.message : String(error);
     }
@@ -344,7 +344,7 @@
 
   function addSelectionToStack() {
     pasteStack = reducePasteStack(pasteStack, { type: "append", itemIds: selection.selected });
-    status = `${pasteStack.itemIds.length} 项已加入 Paste Stack`;
+    status = `${pasteStack.itemIds.length} 项已加入粘贴队列`;
   }
 
   async function consumeStack() {

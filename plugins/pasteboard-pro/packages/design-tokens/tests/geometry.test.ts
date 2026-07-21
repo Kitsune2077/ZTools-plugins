@@ -35,6 +35,10 @@ describe("shelfRadius", () => {
       { topLeft: 28, topRight: 28, bottomRight: 0, bottomLeft: 0 },
     ],
     [
+      "top",
+      { topLeft: 0, topRight: 0, bottomRight: 28, bottomLeft: 28 },
+    ],
+    [
       "left",
       { topLeft: 0, topRight: 28, bottomRight: 28, bottomLeft: 0 },
     ],
@@ -62,7 +66,10 @@ describe("resolveDockEdge", () => {
     ).toBe("left");
   });
 
-  it("resolves bottom and right edge gaps", () => {
+  it("resolves top, bottom, and right edge gaps", () => {
+    expect(
+      resolveDockEdge({ x: 300, y: 5, width: 220, height: 145 }, display),
+    ).toBe("top");
     expect(
       resolveDockEdge({ x: 300, y: 650, width: 220, height: 145 }, display),
     ).toBe("bottom");

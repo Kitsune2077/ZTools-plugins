@@ -31,6 +31,11 @@ function beginRename(pinboard: Pinboard): void {
   draft.value = pinboard.name;
 }
 
+function beginRenameFromMenu(pinboard: Pinboard): void {
+  managingId.value = undefined;
+  beginRename(pinboard);
+}
+
 function cancelEdit(): void {
   creating.value = false;
   editingId.value = undefined;
@@ -58,12 +63,18 @@ function changeColor(event: Event, id: string): void {
   const target = event.target;
   if (target instanceof HTMLInputElement) {
     emit("updateColor", { id, color: target.value });
+    managingId.value = undefined;
   }
+}
+
+function moveFromMenu(id: string, direction: -1 | 1): void {
+  managingId.value = undefined;
+  emit("move", { id, direction });
 }
 </script>
 
 <template>
-  <nav class="pinboards" aria-label="Pinboards">
+  <nav class="pinboards" aria-label="分组">
     <button
       type="button"
       :class="{ active: activeId === undefined }"
@@ -102,7 +113,7 @@ function changeColor(event: Event, id: string): void {
         v-else
         v-model="draft"
         class="inline-name"
-        aria-label="重命名 Pinboard"
+        aria-label="重命名分组"
         autofocus
         @click.stop
         @keydown.enter.prevent="commitRename(pinboard.id)"
@@ -110,15 +121,27 @@ function changeColor(event: Event, id: string): void {
         @blur="commitRename(pinboard.id)"
       />
       <div v-if="managingId === pinboard.id" class="chip-controls" :aria-label="`${pinboard.name} 管理选项`">
-        <input
-          class="color-input"
-          type="color"
-          :value="pinboard.color"
-          aria-label="Pinboard 颜色"
-          @change="changeColor($event, pinboard.id)"
-        />
-        <button type="button" aria-label="向左移动" :disabled="pinboards[0]?.id === pinboard.id" @click="emit('move', { id: pinboard.id, direction: -1 })">←</button>
-        <button type="button" aria-label="向右移动" :disabled="pinboards.at(-1)?.id === pinboard.id" @click="emit('move', { id: pinboard.id, direction: 1 })">→</button>
+        <button type="button" @click="beginRenameFromMenu(pinboard)">重命名</button>
+        <label class="color-action">
+          <input
+            class="color-input"
+            type="color"
+            :value="pinboard.color"
+            aria-label="分组颜色"
+            @change="changeColor($event, pinboard.id)"
+          />
+          <span>颜色</span>
+        </label>
+        <button
+          v-if="pinboards[0]?.id !== pinboard.id"
+          type="button"
+          @click="moveFromMenu(pinboard.id, -1)"
+        >← 移到左侧</button>
+        <button
+          v-if="pinboards.at(-1)?.id !== pinboard.id"
+          type="button"
+          @click="moveFromMenu(pinboard.id, 1)"
+        >移到右侧 →</button>
         <button type="button" class="danger-button" @click="managingId = undefined; emit('delete', pinboard.id)">删除</button>
       </div>
     </div>
@@ -126,15 +149,15 @@ function changeColor(event: Event, id: string): void {
       v-if="creating"
       v-model="draft"
       class="inline-name inline-name--new"
-      aria-label="新建 Pinboard"
-      placeholder="Pinboard 名称"
+      aria-label="新建分组"
+      placeholder="分组名称"
       autofocus
       @keydown.enter.prevent="commitCreate"
       @keydown.escape.prevent="cancelEdit"
       @blur="commitCreate"
     />
-    <button v-else type="button" class="add-button" aria-label="新建 Pinboard" @click="beginCreate">+</button>
-    <span class="pinboards__hint">⌘ 1–9 Quick Paste</span>
+    <button v-else type="button" class="add-button" aria-label="新建分组" @click="beginCreate">+</button>
+    <span class="pinboards__hint">⌘ 1–9 快捷粘贴</span>
   </nav>
 </template>
 
@@ -205,22 +228,34 @@ button.active {
 }
 
 .chip-controls button {
-  min-width: 23px;
+  min-width: max-content;
   min-height: 23px;
-  padding: 0 5px;
+  padding: 0 7px;
 }
 
-.chip-controls button:disabled {
-  cursor: default;
-  opacity: .3;
+.color-action {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  min-height: 23px;
+  padding: 0 7px;
+  border-radius: 8px;
+  color: var(--pb-muted);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.color-action:hover {
+  background: color-mix(in srgb, var(--pb-violet) 10%, transparent);
+  color: var(--pb-ink);
 }
 
 .color-input {
-  width: 23px;
+  width: 18px;
   height: 23px;
-  padding: 2px;
-  border: 1px solid var(--pb-line);
-  border-radius: 7px;
+  padding: 3px 0;
+  border: 0;
   background: transparent;
   cursor: pointer;
 }

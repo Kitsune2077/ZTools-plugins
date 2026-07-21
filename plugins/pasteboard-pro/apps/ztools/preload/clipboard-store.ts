@@ -110,6 +110,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+export function documentsFromAllDocs(
+  result: unknown,
+  errorMessage: string,
+): unknown[] {
+  if (Array.isArray(result)) {
+    return result;
+  }
+  if (isRecord(result) && Array.isArray(result.rows)) {
+    return result.rows.flatMap((row) =>
+      isRecord(row) && "doc" in row ? [row.doc] : [],
+    );
+  }
+  throw new TypeError(errorMessage);
+}
+
 function documentRevision(value: unknown): string | undefined {
   return isRecord(value) && typeof value._rev === "string"
     ? value._rev
@@ -337,16 +352,12 @@ export class ZToolsCanonicalClipboardStore implements CanonicalClipboardStore {
       startkey: "pasteboard-pro:record:",
       endkey: "pasteboard-pro:record:\uffff",
     });
-    if (!isRecord(result) || !Array.isArray(result.rows)) {
-      throw new TypeError("ZTools database returned invalid record rows");
-    }
-
-    return result.rows
-      .flatMap((row) => {
-        if (!isRecord(row)) {
-          return [];
-        }
-        const record = storedRecord(row.doc);
+    return documentsFromAllDocs(
+      result,
+      "ZTools database returned invalid record rows",
+    )
+      .flatMap((document) => {
+        const record = storedRecord(document);
         return record === undefined ? [] : [record];
       })
       .sort(
@@ -402,7 +413,7 @@ export class ZToolsCanonicalClipboardStore implements CanonicalClipboardStore {
       id,
       kind: "text",
       ...(normalizedTitle === undefined ? {} : { title: normalizedTitle }),
-      sourceApp: { name: "PasteboardPro" },
+      sourceApp: { name: "Paste剪切板" },
       sourceDeviceId: this.deviceId,
       copiedAt: new Date(timestamp).toISOString(),
       updatedAt: new Date(timestamp).toISOString(),

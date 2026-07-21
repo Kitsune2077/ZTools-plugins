@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import type { PasteItem } from "@pasteboard-pro/core";
+
+import {
+  loadItemThumbnail,
+  observeThumbnailVisibility,
+} from "../thumbnail-loader";
 
 const props = defineProps<{
   item: PasteItem;
   selected: boolean;
   index: number;
+  vertical?: boolean;
+  compact?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -14,6 +21,10 @@ const emit = defineEmits<{
   paste: [itemId: string];
   preview: [itemId: string];
 }>();
+const card = ref<HTMLElement>();
+const thumbnailUrl = ref<string>();
+const thumbnailRequested = ref(false);
+let stopObservingThumbnail: (() => void) | undefined;
 
 function beginDrag(event: DragEvent): void {
   event.dataTransfer?.setData("application/x-pasteboard-pro-item", props.item.id);
@@ -30,13 +41,41 @@ const bodyText = computed(() => {
   if (props.item.ocrText !== undefined) return props.item.ocrText;
   return props.item.payload.mediaType ?? props.item.kind;
 });
+
+async function loadThumbnail(): Promise<void> {
+  if (props.item.kind !== "image") return;
+  thumbnailRequested.value = true;
+  thumbnailUrl.value = await loadItemThumbnail(
+    props.item.id,
+    props.item.payload.revision,
+  );
+}
+
+onMounted(() => {
+  if (props.item.kind !== "image" || card.value === undefined) return;
+  stopObservingThumbnail = observeThumbnailVisibility(card.value, () => {
+    void loadThumbnail();
+  });
+});
+
+watch(
+  () => props.item.payload.revision,
+  () => {
+    thumbnailUrl.value = undefined;
+    if (thumbnailRequested.value) void loadThumbnail();
+  },
+);
+
+onBeforeUnmount(() => stopObservingThumbnail?.());
 </script>
 
 <template>
   <article
+    ref="card"
     class="paste-card"
-    :class="[`paste-card--${item.kind}`, { 'paste-card--selected': selected }]"
+    :class="[`paste-card--${item.kind}`, { 'paste-card--selected': selected, 'paste-card--vertical': vertical, 'paste-card--compact': compact }]"
     :aria-selected="selected"
+    :data-pb-item-id="item.id"
     role="option"
     tabindex="0"
     draggable="true"
@@ -51,8 +90,15 @@ const bodyText = computed(() => {
       <kbd v-if="index < 9">{{ index + 1 }}</kbd>
     </header>
     <div v-if="item.kind === 'color'" class="color-preview" :style="{ background: item.payload.text }"></div>
-    <div v-else-if="item.kind === 'image'" class="image-preview" aria-label="图片预览占位">
-      <span>IMAGE</span>
+    <div v-else-if="item.kind === 'image'" class="image-preview" aria-label="图片缩略图">
+      <img
+        v-if="thumbnailUrl"
+        :src="thumbnailUrl"
+        :alt="item.title ?? '剪贴板图片缩略图'"
+        decoding="async"
+        draggable="false"
+      />
+      <span v-else>IMAGE</span>
     </div>
     <p v-else>{{ bodyText }}</p>
     <footer>
@@ -78,10 +124,48 @@ const bodyText = computed(() => {
   cursor: default;
   outline: 0;
   transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  contain: layout paint style;
+  content-visibility: auto;
+  contain-intrinsic-size: var(--pb-card-width) 142px;
 }
 
 .paste-card:hover {
   transform: translateY(-2px);
+}
+
+.paste-card--vertical {
+  flex: 0 0 auto;
+  width: 100%;
+}
+
+.paste-card--vertical.paste-card--compact {
+  height: 108px;
+  padding: 9px;
+  border-radius: 15px;
+  contain-intrinsic-size: 100% 108px;
+}
+
+.paste-card--vertical.paste-card--compact p {
+  margin: 6px 0;
+  font-size: 11px;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+}
+
+.paste-card--vertical.paste-card--compact .color-preview,
+.paste-card--vertical.paste-card--compact .image-preview {
+  min-height: 38px;
+  margin: 5px 0;
+  border-radius: 9px;
+}
+
+.paste-card--vertical.paste-card--compact .image-preview img {
+  min-height: 38px;
+}
+
+.paste-card--vertical.paste-card--compact kbd {
+  width: 16px;
+  height: 16px;
 }
 
 .paste-card--selected,
@@ -151,6 +235,14 @@ p {
   font-weight: 750;
   letter-spacing: 0.18em;
   place-items: center;
+}
+
+.image-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 62px;
+  object-fit: cover;
 }
 
 footer {

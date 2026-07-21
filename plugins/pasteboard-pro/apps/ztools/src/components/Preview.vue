@@ -3,7 +3,7 @@ import { ref, watch } from "vue";
 
 import type { PasteItem } from "@pasteboard-pro/core";
 
-const props = defineProps<{ item: PasteItem }>();
+const props = defineProps<{ item: PasteItem; standalone?: boolean }>();
 const emit = defineEmits<{
   close: [];
   paste: [itemId: string, plainText: boolean];
@@ -42,7 +42,7 @@ watch(
 </script>
 
 <template>
-  <aside class="preview" aria-label="内容预览">
+  <aside class="preview" :class="{ 'preview--standalone': standalone }" aria-label="内容预览">
     <header>
       <div>
         <span>{{ item.kind }}</span>
@@ -98,6 +98,18 @@ watch(
   background: color-mix(in srgb, var(--pb-glass-strong) 94%, transparent);
   box-shadow: 0 24px 60px var(--pb-shadow);
   backdrop-filter: blur(30px);
+}
+
+.preview--standalone {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--pb-window-bg);
+  box-shadow: none;
+  backdrop-filter: none;
 }
 
 header,

@@ -21,11 +21,12 @@ assert.equal(packageJson.scripts.verify, "node scripts/verify-package.mjs");
 assert.equal(packageJson.scripts.typecheck, "vue-tsc --noEmit -p tsconfig.vue.json");
 
 assert.equal(manifest.name, "pasteboard-pro");
-assert.equal(manifest.title, "PasteboardPro");
+assert.equal(manifest.title, "Paste剪切板");
 assert.equal(manifest.main, "index.html");
 assert.equal(manifest.preload, "preload.js");
-assert.equal(manifest.logo, "logo.svg");
+assert.equal(manifest.logo, "logo.png");
 assert.deepEqual(manifest.platform, ["darwin", "win32", "linux"]);
+assert.deepEqual(manifest.categories, ["productivity"]);
 assert.equal("development" in manifest, false);
 
 const entryFeature = manifest.features.find(
@@ -33,6 +34,7 @@ const entryFeature = manifest.features.find(
 );
 assert.ok(entryFeature);
 assert.ok(entryFeature.cmds.includes("剪贴板"));
+assert.ok(entryFeature.cmds.includes("Paste剪切板"));
 assert.ok(entryFeature.cmds.includes("PasteboardPro"));
 
 const searchTool = manifest.tools.search_history;
@@ -45,7 +47,7 @@ assert.deepEqual(preloadPackage, { type: "commonjs" });
 
 for (const path of [
   "index.html",
-  "public/logo.svg",
+  "public/logo.png",
   "preload/index.ts",
   "preload/ocr.ts",
   "preload/paste-item.ts",
@@ -54,7 +56,9 @@ for (const path of [
   "preload/quick-look.ts",
   "preload/retention.ts",
   "preload/tools.ts",
+  "preload/thumbnail.ts",
   "preload/window.ts",
+  "preload/window-preferences.ts",
   "native/vision-helper/main.swift",
   "native/vision-helper/build.sh",
   "scripts/assemble-dist.mjs",
@@ -62,7 +66,9 @@ for (const path of [
   "scripts/attest-vision-helper.d.mts",
   "src/main.ts",
   "src/App.vue",
+  "src/blob-budget.ts",
   "src/state.ts",
+  "src/thumbnail-loader.ts",
   "src/components/Shelf.vue",
   "src/components/Toolbar.vue",
   "src/components/Timeline.vue",
@@ -71,8 +77,10 @@ for (const path of [
   "src/components/PinboardStrip.vue",
   "src/components/Preview.vue",
   "src/components/PrivacySettings.vue",
+  "src/components/SyncSettings.vue",
   "src/components/PasteStack.vue",
   "src/components/TextEditor.vue",
+  "src/env.d.ts",
   "src/styles/tokens.css",
   "src/styles/glass.css",
   "src/styles/layout.css",

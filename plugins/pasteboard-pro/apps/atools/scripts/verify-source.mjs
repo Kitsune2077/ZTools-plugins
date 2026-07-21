@@ -34,7 +34,7 @@ assert.match(timeline, /items\.slice\(start, end\)/);
 assert.match(card, /application\/x-pasteboard-pro-item/);
 assert.match(pinboards, /ondrop/);
 assert.match(preview, /纯文本/);
-assert.match(stack, /Paste Stack/);
+assert.match(stack, /粘贴队列/);
 assert.match(preferences, /历史保留天数/);
 assert.match(preferences, /屏幕共享时隐藏浮窗/);
 assert.match(editor, /新建文本/);

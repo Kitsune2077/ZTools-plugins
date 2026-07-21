@@ -7,17 +7,17 @@
 </script>
 
 <header class="toolbar">
-  <div class="brand"><span class="mark">P</span><div><strong>PasteboardPro</strong><small>{status}</small></div></div>
+  <div class="brand"><img class="mark" src="/logo.png" alt="" /><div><strong>Paste剪切板</strong><small>{status}</small></div></div>
   <label class="search">
     <span aria-hidden="true">⌕</span>
-    <input data-pb-search type="search" value={query} placeholder="搜索内容、App、日期或 Pinboard" autocomplete="off" oninput={(event) => onquery(event.currentTarget.value)} />
+    <input data-pb-search type="search" value={query} placeholder="搜索内容、App、日期或分组" autocomplete="off" oninput={(event) => onquery(event.currentTarget.value)} />
     <kbd>⌘F</kbd>
   </label>
   <div class="actions">
     <button type="button" onclick={oncreate} title="新建文本（Command-N）"><span>＋</span><em>新建</em></button>
     <button type="button" onclick={onsettings} title="隐私与历史保留"><span>⚙</span><em>设置</em></button>
     <button type="button" class:active={syncState === "syncing"} onclick={onsync} title="立即同步"><span>↻</span><em>{syncState === "success" ? "已同步" : "同步"}</em></button>
-    <button type="button" onclick={onaddstack} title="加入 Paste Stack"><span>≋</span><em>Stack</em></button>
+    <button type="button" onclick={onaddstack} title="加入粘贴队列"><span>≋</span><em>队列</em></button>
     <button type="button" aria-pressed={compact} onclick={ontogglecompact} title="切换紧凑模式"><span>↔</span><em>{compact ? "展开" : "紧凑"}</em></button>
     <button type="button" class:paused aria-pressed={paused} onclick={ontogglepause}><span>{paused ? "▶" : "Ⅱ"}</span><em>{paused ? "继续" : "暂停"}</em></button>
   </div>
@@ -26,7 +26,7 @@
 <style>
   .toolbar { display:grid; grid-template-columns:auto minmax(240px, 520px) auto; gap:16px; align-items:center; min-height:68px; padding:12px 16px 10px; border-bottom:1px solid color-mix(in srgb, var(--pb-line) 72%, transparent); }
   .brand { display:flex; gap:10px; align-items:center; min-width:150px; }
-  .mark { display:grid; width:30px; height:30px; border-radius:10px; background:linear-gradient(145deg,var(--pb-violet),#5145c4); box-shadow:0 7px 18px rgba(71,59,185,.32), inset 0 1px rgba(255,255,255,.42); color:white; font-size:13px; font-weight:800; place-items:center; }
+  .mark { display:block; width:30px; height:30px; border-radius:10px; box-shadow:0 7px 18px rgba(71,59,185,.24); object-fit:cover; }
   .brand div { display:grid; gap:2px; min-width:0; }
   strong { color:var(--pb-ink); font-size:12px; letter-spacing:-.01em; }
   small { max-width:160px; overflow:hidden; color:var(--pb-muted); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }

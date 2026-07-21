@@ -1,6 +1,6 @@
 import { pasteboardTokens } from "./tokens";
 
-export type DockEdge = "floating" | "bottom" | "left" | "right";
+export type DockEdge = "floating" | "top" | "bottom" | "left" | "right";
 
 export type Rect = {
   x: number;
@@ -37,6 +37,13 @@ export function shelfRadius(edge: DockEdge): CornerRadii {
         topRight: radius,
         bottomRight: 0,
         bottomLeft: 0,
+      };
+    case "top":
+      return {
+        topLeft: 0,
+        topRight: 0,
+        bottomRight: radius,
+        bottomLeft: radius,
       };
     case "left":
       return {
@@ -88,6 +95,7 @@ export function resolveDockEdge(
     edge: Exclude<DockEdge, "floating">;
     gap: number;
   }[] = [
+    { edge: "top", gap: Math.abs(rect.y - workArea.y) },
     {
       edge: "bottom",
       gap: Math.abs(rectEdges.bottom - workAreaEdges.bottom),

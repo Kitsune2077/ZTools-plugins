@@ -5,7 +5,11 @@ import type { SaveSyncConfigurationInput } from "../../preload/sync-config";
 import type { SyncSettings } from "../../preload/sync-store";
 import { syncStatusPresentation } from "../sync-view";
 
-const props = defineProps<{ settings: SyncSettings; saving: boolean }>();
+const props = defineProps<{
+  settings: SyncSettings;
+  saving: boolean;
+  standalone?: boolean;
+}>();
 const emit = defineEmits<{
   close: [];
   save: [input: SaveSyncConfigurationInput];
@@ -47,7 +51,7 @@ function save(): void {
 </script>
 
 <template>
-  <div class="sync-backdrop" @click.self="emit('close')">
+  <div class="sync-backdrop" :class="{ 'sync-backdrop--standalone': standalone }" @click.self="emit('close')">
     <section class="sync-panel glass-surface" aria-labelledby="sync-title">
       <header class="sync-panel__header">
         <div>
@@ -68,7 +72,7 @@ function save(): void {
 
       <form class="sync-form" @submit.prevent="save">
         <label class="sync-toggle">
-          <span><strong>启用加密同步</strong><small>正文、OCR、Pinboards、图片和 PDF 默认同步</small></span>
+          <span><strong>启用加密同步</strong><small>正文、OCR、分组、图片和 PDF 默认同步</small></span>
           <input v-model="form.enabled" type="checkbox" />
         </label>
 
@@ -108,6 +112,8 @@ function save(): void {
 
 <style scoped>
 .sync-backdrop { position: absolute; inset: 0; z-index: 20; display: grid; padding: 12px; background: color-mix(in srgb, #171521 28%, transparent); place-items: center; backdrop-filter: blur(10px); }
+.sync-backdrop--standalone { padding: 0; background: var(--pb-window-bg); backdrop-filter: none; }
+.sync-backdrop--standalone .sync-panel { width: 100%; height: 100%; max-height: 100%; border: 0; border-radius: 0; background: var(--pb-window-bg); box-shadow: none; }
 .sync-panel { width: min(620px, 100%); max-height: calc(100% - 8px); overflow: auto; border: 1px solid var(--pb-line); border-radius: 20px; background: color-mix(in srgb, var(--pb-glass-strong) 92%, transparent); box-shadow: 0 28px 80px rgb(25 20 43 / 32%); }
 .sync-panel__header { display: flex; align-items: flex-start; justify-content: space-between; padding: 20px 22px 14px; }
 .sync-panel__eyebrow { margin: 0 0 4px; color: var(--pb-violet); font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }

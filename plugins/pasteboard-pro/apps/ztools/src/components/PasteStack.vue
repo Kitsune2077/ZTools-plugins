@@ -15,7 +15,7 @@ const emit = defineEmits<{
 <template>
   <div v-if="count > 0" class="paste-stack" role="status">
     <span class="paste-stack__layers" aria-hidden="true"></span>
-    <strong>Paste Stack</strong>
+    <strong>粘贴队列</strong>
     <span>{{ count }} 项 · {{ direction === 'forward' ? '正序' : '倒序' }}</span>
     <button type="button" @click="emit('toggleDirection')">切换方向</button>
     <button type="button" @click="emit('clear')">清空</button>

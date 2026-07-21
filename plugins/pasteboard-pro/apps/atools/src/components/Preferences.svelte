@@ -40,7 +40,7 @@
         <label><span>附件预算（GiB）</span><input type="number" min="0.0625" max="100" step="0.25" bind:value={blobBudgetGiB} /></label>
       </div>
       <label class="field"><span>敏感内容字面量（每行一个）</span><textarea rows="6" bind:value={privacyLiterals} placeholder="PRIVATE NOTE&#10;internal-only" spellcheck="false"></textarea></label>
-      <p>字面量规则和内置令牌、私钥、验证码、支付卡检测会在历史与附件落盘前执行。Pinboard 与固定内容不受普通过期清理影响。</p>
+      <p>字面量规则和内置令牌、私钥、验证码、支付卡检测会在历史与附件落盘前执行。分组与固定内容不受普通过期清理影响。</p>
       <footer><button type="button" class="quiet" onclick={onclose}>取消</button><button type="submit" class="primary" disabled={saving}>{saving ? "正在保存…" : "保存设置"}</button></footer>
     </form>
   </section>
