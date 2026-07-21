@@ -40,7 +40,7 @@ declare global {
         setCapturePaused(paused: boolean): Promise<{ paused: boolean; retentionDays: number; itemCount: number }>;
         preferences(): Promise<PasteboardPreferences>;
         savePreferences(preferences: PasteboardPreferences): Promise<PasteboardPreferences>;
-        windowState(): Promise<{ edge: "floating" | "bottom" | "left" | "right"; monitorName?: string | null; x: number; y: number; width: number; height: number }>;
+        windowState(): Promise<{ edge: "floating" | "top" | "bottom" | "left" | "right"; monitorName?: string | null; x: number; y: number; width: number; height: number }>;
         startShelfDrag(): Promise<void>;
         hideShelf(): Promise<void>;
         itemPreview(itemId: string): Promise<{ mediaType: string; dataBase64: string } | null>;
