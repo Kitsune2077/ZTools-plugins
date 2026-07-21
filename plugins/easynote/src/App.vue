@@ -23,10 +23,16 @@ onMounted(() => {
   window.ztools.setExpendHeight?.(560)
 
   window.ztools.onPluginEnter((action) => {
-    if (action.code !== 'note') return
-    reloadNotes()
-    view.value = 'home'
-    window.ztools.setExpendHeight?.(560)
+    if (action.code === 'note') {
+      reloadNotes()
+      view.value = 'home'
+      window.ztools.setExpendHeight?.(560)
+      return
+    }
+    if (action.code === 'new-note') {
+      openEditor(null)
+      return
+    }
   })
 
   // 拦截主窗口关闭：如果便利贴正在打开，阻止关闭并隐藏主窗口

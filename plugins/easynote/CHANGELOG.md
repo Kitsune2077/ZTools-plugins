@@ -4,6 +4,12 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [1.4.0] - 2026-07-21
+
+### 新增
+
+- **直接新建便签指令**：新增 `新建便签` / `新便签` / `new-note` 三个指令，在 ZTools 中直接触发即可打开空白便利贴，无需经过管理主页。由 `plugin.json` 中新增的 `new-note` feature 实现，`App.vue` 的 `onPluginEnter` 处理器按 action code 分发，`new-note` 直接调用 `openEditor(null)` 跳过 Home 页面。
+
 ## [1.3.0] - 2026-07-20
 
 ### 修复
