@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 
-import { historyFixture, pinboardFixture } from "@pasteboard-pro/contract-fixtures";
 import {
   PinboardSchema,
   type PasteItem,
@@ -47,17 +46,13 @@ const edge: DockEdge =
     ? dockValue
     : "floating";
 
-const developmentItems = import.meta.env.DEV ? historyFixture : [];
-const developmentPinboards = import.meta.env.DEV ? pinboardFixture : [];
 const state = reactive(
   createPasteboardState({
-    items: developmentItems,
+    items: [],
     dockEdge: edge,
   }),
 );
-const pinboards = ref<Pinboard[]>(
-  developmentPinboards.map((pinboard) => structuredClone(pinboard)),
-);
+const pinboards = ref<Pinboard[]>([]);
 const query = ref("");
 const paused = ref(false);
 const activePinboardId = ref<string>();
@@ -80,6 +75,15 @@ const editorSaving = ref(false);
 let shelfHasFocused = false;
 let stackPasteInProgress = false;
 let pasteStackPersistence = Promise.resolve();
+
+async function loadDevelopmentFixtures(): Promise<void> {
+  if (!import.meta.env.DEV) return;
+  const { historyFixture, pinboardFixture } = await import(
+    "@pasteboard-pro/contract-fixtures"
+  );
+  state.replaceItems(historyFixture);
+  pinboards.value = pinboardFixture.map((pinboard) => structuredClone(pinboard));
+}
 
 const visibleItems = computed(() => {
   const items = state.visibleItems;
@@ -548,6 +552,7 @@ function onWindowBlur(): void {
 onMounted(async () => {
   window.addEventListener("keydown", onKeydown);
   window.addEventListener("pasteboard-pro:paste-stack-changed", onPasteStackChanged);
+  await loadDevelopmentFixtures();
   if (isShelfMode) {
     shelfHasFocused = document.hasFocus();
     window.addEventListener("focus", onWindowFocus);
