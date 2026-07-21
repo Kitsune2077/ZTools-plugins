@@ -536,7 +536,7 @@
     -webkit-font-smoothing: antialiased;
   }
   :global(button), :global(input) { font: inherit; }
-  main { position: relative; min-width: 0; padding: 10px; }
+  main { position: relative; min-width: 0; padding: 0; }
   :global(:root) {
     --pb-radius: 28px;
     --pb-ink: #f7f7fb;
