@@ -207,7 +207,8 @@ async function visualPage(
   const page = await context.newPage();
   const errors = collectConsoleErrors(page);
   const port = host === "atools" ? 5180 : 5179;
-  await page.goto(`http://127.0.0.1:${port}/?visual=1&dock=${dock}`, { waitUntil: "networkidle" });
+  const shelfQuery = host === "ztools" ? "&shelf=1" : "";
+  await page.goto(`http://127.0.0.1:${port}/?visual=1&dock=${dock}${shelfQuery}`, { waitUntil: "networkidle" });
   await expect(page.getByLabel("Paste剪切板").first()).toBeVisible();
   await expect(page.getByRole("option")).toHaveCount(5);
   return { page, errors };

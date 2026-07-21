@@ -15,7 +15,7 @@ export default defineConfig({
   webServer: [
     {
       command: "pnpm --filter @pasteboard-pro/ztools dev -- --host 127.0.0.1",
-      url: "http://127.0.0.1:5179/?visual=1",
+      url: "http://127.0.0.1:5179/?visual=1&shelf=1",
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
