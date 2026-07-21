@@ -28,6 +28,7 @@ describe("Quick Look", () => {
     };
 
     await openQuickLook("/tmp/example.pdf", {
+      platform: "darwin",
       spawn,
       stat: async () => ({ isFile: () => true }),
     });
@@ -41,9 +42,12 @@ describe("Quick Look", () => {
   });
 
   it("rejects relative paths and directories before spawning", async () => {
-    await expect(openQuickLook("relative.pdf")).rejects.toThrow(/absolute/i);
+    await expect(
+      openQuickLook("relative.pdf", { platform: "darwin" }),
+    ).rejects.toThrow(/absolute/i);
     await expect(
       openQuickLook("/tmp/folder", {
+        platform: "darwin",
         stat: async () => ({ isFile: () => false }),
       }),
     ).rejects.toThrow(/file/i);
@@ -57,9 +61,16 @@ describe("Quick Look", () => {
     };
     await expect(
       openQuickLook("/tmp/example.png", {
+        platform: "darwin",
         spawn,
         stat: async () => ({ isFile: () => true }),
       }),
     ).rejects.toThrow("launch failed");
+  });
+
+  it("rejects Quick Look on non-macOS platforms", async () => {
+    await expect(
+      openQuickLook("/tmp/example.pdf", { platform: "linux" }),
+    ).rejects.toThrow("Quick Look 仅支持 macOS");
   });
 });

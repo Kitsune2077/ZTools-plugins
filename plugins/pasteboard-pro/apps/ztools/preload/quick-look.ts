@@ -14,6 +14,7 @@ export type QuickLookSpawn = (
 ) => QuickLookProcess;
 
 export type QuickLookOptions = Readonly<{
+  platform?: NodeJS.Platform;
   spawn?: QuickLookSpawn;
   stat?: (path: string) => Promise<Readonly<{ isFile(): boolean }>>;
   timeoutMs?: number;
@@ -29,7 +30,7 @@ export async function openQuickLook(
   filePath: string,
   options: QuickLookOptions = {},
 ): Promise<void> {
-  if (process.platform !== "darwin") {
+  if ((options.platform ?? process.platform) !== "darwin") {
     throw new Error("Quick Look 仅支持 macOS");
   }
   if (!path.isAbsolute(filePath)) {
