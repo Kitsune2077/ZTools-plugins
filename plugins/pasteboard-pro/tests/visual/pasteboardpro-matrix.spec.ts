@@ -73,12 +73,16 @@ for (const host of hosts) {
     await captureNamedState(page, host, "pinboard", errors);
 
     await page.getByRole("button", { name: "全部", exact: true }).click();
-    const image = page.getByRole("option").filter({ hasText: "Scanned receipt" });
-    await image.focus();
-    await image.press("Space");
-    await expect(page.getByLabel("内容预览")).toBeVisible();
-    await captureNamedState(page, host, "preview", errors);
-    await page.getByRole("button", { name: "关闭预览" }).click();
+    if (host === "ztools") {
+      await captureZtoolsPreview(browser);
+    } else {
+      const image = page.getByRole("option").filter({ hasText: "Scanned receipt" });
+      await image.focus();
+      await image.press("Space");
+      await expect(page.getByLabel("内容预览")).toBeVisible();
+      await captureNamedState(page, host, "preview", errors);
+      await page.getByRole("button", { name: "关闭预览" }).click();
+    }
 
     const first = page.getByRole("option").first();
     await first.click();
@@ -165,9 +169,12 @@ async function captureNamedState(
   host: Host,
   state: string,
   errors: string[],
+  surfaceLabel = "Paste剪切板",
 ): Promise<void> {
   await settle(page);
-  const shelf = page.getByLabel("Paste剪切板").filter({ has: page.getByRole("option") }).first();
+  const shelf = surfaceLabel === "Paste剪切板"
+    ? page.getByLabel(surfaceLabel).filter({ has: page.getByRole("option") }).first()
+    : page.getByLabel(surfaceLabel).first();
   const box = await shelf.boundingBox();
   assertBox(box);
   const screenshot = `${host}/${state}.png`;
@@ -190,6 +197,24 @@ async function captureNamedState(
     }),
     consoleErrors: [...errors],
   });
+}
+
+async function captureZtoolsPreview(browser: Browser): Promise<void> {
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 420 },
+    colorScheme: "dark",
+    reducedMotion: "no-preference",
+  });
+  const page = await context.newPage();
+  const errors = collectConsoleErrors(page);
+  await page.goto(
+    "http://127.0.0.1:5179/?visual=1&panel=preview&itemId=image-new",
+    { waitUntil: "networkidle" },
+  );
+  await expect(page.getByLabel("内容预览")).toBeVisible();
+  await captureNamedState(page, "ztools", "preview", errors, "内容预览");
+  expect(errors).toEqual([]);
+  await context.close();
 }
 
 async function visualPage(
