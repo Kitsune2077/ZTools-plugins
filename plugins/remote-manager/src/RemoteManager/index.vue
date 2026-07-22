@@ -124,7 +124,7 @@ function handleDelete(host: RemoteHost) {
 
 function handleConnect(host: RemoteHost) {
   try {
-    const result = window.services.connectRdp(host.address, host.username, 'base64:' + host.password)
+    const result = window.services.connectRdp(host.address, host.username, host.password)
     if (result.success) {
       showTip('正在连接...')
       setTimeout(() => window.ztools.hideMainWindow(), 800)
