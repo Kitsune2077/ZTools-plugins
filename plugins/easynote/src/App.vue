@@ -53,6 +53,14 @@ function onBeforeUnload(e: BeforeUnloadEvent) {
     } catch {
       /* ignore */
     }
+
+    // 轮询检测便利贴窗口是否已关闭，关闭后结束插件进程
+    const timer = setInterval(() => {
+      if (!isStickyNoteOpen()) {
+        clearInterval(timer)
+        window.ztools.outPlugin(true)
+      }
+    }, 500)
   }
 }
 
