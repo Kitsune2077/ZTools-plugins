@@ -8,15 +8,18 @@ import { open } from "lmdb";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const source = path.join(root, "dist");
-const target = path.join(
-  os.homedir(),
-  "Library",
-  "Application Support",
-  "ZTools",
-  "plugins",
-  "image-batch-studio"
-);
-const dbPath = path.join(os.homedir(), "Library", "Application Support", "ZTools", "lmdb");
+const home = os.homedir();
+const modernRoot = path.join(home, ".ztools");
+const legacyRoot = path.join(home, "Library", "Application Support", "ZTools");
+const modernLayout = await fs
+  .access(path.join(modernRoot, "version.json"))
+  .then(() => true)
+  .catch(() => false);
+const dataRoot = modernLayout ? modernRoot : legacyRoot;
+const target = path.join(dataRoot, "plugins", "image-batch-studio");
+const dbPath = modernLayout
+  ? path.join(dataRoot, "lmdb", "device")
+  : path.join(dataRoot, "lmdb");
 const pluginName = "image-batch-studio";
 
 function parseJson(value) {
@@ -52,7 +55,7 @@ function openZToolsDb() {
   const env = open({
     path: dbPath,
     mapSize: 2 * 1024 * 1024 * 1024,
-    maxDbs: 3,
+    maxDbs: modernLayout ? 6 : 3,
     compression: false,
     encoding: "binary"
   });
@@ -76,6 +79,7 @@ function buildPluginRecord(pluginConfig) {
     preload: pluginConfig.preload,
     features: Array.isArray(pluginConfig.features) ? pluginConfig.features : [],
     path: target,
+    storageKind: "directory",
     isDevelopment: false,
     installedAt: new Date().toISOString(),
     installedFrom: "local"
@@ -101,4 +105,4 @@ await fs.rm(target, { recursive: true, force: true });
 await fs.mkdir(path.dirname(target), { recursive: true });
 await fs.cp(source, target, { recursive: true });
 await registerInstalledPlugin(JSON.parse(await fs.readFile(path.join(target, "plugin.json"), "utf8")));
-console.log(target);
+console.log(JSON.stringify({ target, dbPath, layout: modernLayout ? "3.x" : "legacy" }, null, 2));
