@@ -24,6 +24,10 @@ assert.equal(manifest.name, "pasteboard-pro");
 assert.equal(manifest.title, "Paste剪切板");
 assert.equal(manifest.main, "index.html");
 assert.equal(manifest.preload, "preload.js");
+assert.equal(
+  manifest.unpack,
+  "@(pasteboard-vision|paste-stack-key-monitor.py)",
+);
 assert.equal(manifest.logo, "logo.png");
 assert.deepEqual(manifest.platform, ["darwin", "win32", "linux"]);
 assert.deepEqual(manifest.categories, ["productivity"]);
