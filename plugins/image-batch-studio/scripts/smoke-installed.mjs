@@ -7,21 +7,25 @@ import { PDFDocument } from "pdf-lib";
 import { open } from "lmdb";
 
 const require = createRequire(import.meta.url);
-const installedPlugin = path.join(
-  os.homedir(),
-  "Library",
-  "Application Support",
-  "ZTools",
-  "plugins",
-  "image-batch-studio"
-);
+const home = os.homedir();
+const modernRoot = path.join(home, ".ztools");
+const legacyRoot = path.join(home, "Library", "Application Support", "ZTools");
+const modernLayout = await fs
+  .access(path.join(modernRoot, "version.json"))
+  .then(() => true)
+  .catch(() => false);
+const dataRoot = modernLayout ? modernRoot : legacyRoot;
+const installedPlugin = path.join(dataRoot, "plugins", "image-batch-studio");
+const dbPath = modernLayout
+  ? path.join(dataRoot, "lmdb", "device")
+  : path.join(dataRoot, "lmdb");
 const processor = require(path.join(installedPlugin, "preload", "processor.js"));
 
 function readInstalledPluginRecord() {
   const env = open({
-    path: path.join(os.homedir(), "Library", "Application Support", "ZTools", "lmdb"),
+    path: dbPath,
     mapSize: 2 * 1024 * 1024 * 1024,
-    maxDbs: 3,
+    maxDbs: modernLayout ? 6 : 3,
     compression: false,
     encoding: "binary"
   });
