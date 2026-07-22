@@ -3,14 +3,14 @@
   "title": "奶龙桌宠",
   "description": "桌宠奶龙陪你工作学习",
   "author": "nai-long",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "preload": "preload.js",
   "logo": "logo.png",
   "features": [
     {
       "code": "start-pet",
       "explain": "启动奶龙桌宠",
-      "cmds": ["奶龙", "桌宠", "奶龙桌宠"],
+      "cmds": ["奶龙"],
       "mainHide": true
     }
   ],
