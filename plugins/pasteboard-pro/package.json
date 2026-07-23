@@ -1,7 +1,7 @@
 {
   "name": "pasteboard-pro-workspace",
   "private": true,
-  "packageManager": "pnpm@11.7.0",
+  "packageManager": "pnpm@9.15.9",
   "scripts": {
     "build": "pnpm --filter @pasteboard-pro/atools build && pnpm --filter @pasteboard-pro/ztools build",
     "benchmark:search": "node scripts/benchmark-pasteboardpro.mjs",

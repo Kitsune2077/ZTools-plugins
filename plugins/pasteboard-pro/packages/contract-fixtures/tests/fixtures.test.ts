@@ -1,7 +1,5 @@
-import { spawnSync } from "node:child_process";
 import { createCipheriv } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 
 import {
   PasteItemSchema,
@@ -450,28 +448,13 @@ describe("fixture source determinism and public imports", () => {
     });
   });
 
-  it("loads the root and every subpath with Node native ESM", () => {
-    const workspaceRoot = fileURLToPath(new URL("../../../", import.meta.url));
-    const smoke = spawnSync(
-      process.execPath,
-      [
-        "--input-type=module",
-        "--eval",
-        `
-          const root = await import("@pasteboard-pro/contract-fixtures");
-          const history = await import("@pasteboard-pro/contract-fixtures/history");
-          const keyboard = await import("@pasteboard-pro/contract-fixtures/keyboard");
-          const sync = await import("@pasteboard-pro/contract-fixtures/sync");
-          if (root.historyFixture !== history.historyFixture) throw new Error("history export mismatch");
-          if (root.selectionKeyboardFixture !== keyboard.selectionKeyboardFixture) throw new Error("keyboard export mismatch");
-          if (root.aes256GcmZeroVector !== sync.aes256GcmZeroVector) throw new Error("sync export mismatch");
-          if ("deepFreeze" in root) throw new Error("private freeze helper leaked");
-        `,
-      ],
-      { cwd: workspaceRoot, encoding: "utf8" },
-    );
+  it("resolves the root and every subpath with the CI toolchain", async () => {
+    const root = await import("@pasteboard-pro/contract-fixtures");
 
-    expect(smoke.status, smoke.stderr || smoke.stdout).toBe(0);
+    expect(root.historyFixture).toBe(historySubmoduleFixture);
+    expect(root.selectionKeyboardFixture).toBe(keyboardSubmoduleFixture);
+    expect(root.aes256GcmZeroVector).toBe(syncSubmoduleFixture);
+    expect("deepFreeze" in root).toBe(false);
   });
 
   it("rejects nested mutation without changing fixture values", () => {

@@ -30,7 +30,7 @@ assert.equal(
 );
 assert.equal(manifest.logo, "logo.png");
 assert.deepEqual(manifest.pluginSetting, { backgroundRunning: true });
-assert.deepEqual(manifest.platform, ["darwin", "win32", "linux"]);
+assert.deepEqual(manifest.platform, ["darwin"]);
 assert.deepEqual(manifest.categories, ["productivity"]);
 assert.equal("development" in manifest, false);
 

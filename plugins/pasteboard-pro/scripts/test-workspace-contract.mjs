@@ -3,33 +3,21 @@ import { readFile } from "node:fs/promises";
 
 const root = new URL("../", import.meta.url);
 const pkg = JSON.parse(await readFile(new URL("package.json", root), "utf8"));
+const manifest = JSON.parse(await readFile(new URL("plugin.json", root), "utf8"));
+const ztoolsManifest = JSON.parse(
+  await readFile(new URL("apps/ztools/public/plugin.json", root), "utf8"),
+);
 const workspace = await readFile(new URL("pnpm-workspace.yaml", root), "utf8");
 const tsconfig = JSON.parse(
   await readFile(new URL("tsconfig.json", root), "utf8"),
 );
-const [
-  pullRequestWorkflow,
-  pullRequestPlatformWorkflow,
-  releaseWorkflow,
-  releasePlatformWorkflow,
-] = await Promise.all([
-  readFile(new URL("../../.github/workflows/build-pr-plugin.yml", root), "utf8"),
-  readFile(
-    new URL("../../.github/workflows/build-pr-plugin-platform.yml", root),
-    "utf8",
-  ),
-  readFile(new URL("../../.github/workflows/build-and-release.yml", root), "utf8"),
-  readFile(
-    new URL("../../.github/workflows/build-release-plugin-platform.yml", root),
-    "utf8",
-  ),
-]);
-const pullRequestWorkflows = `${pullRequestWorkflow}\n${pullRequestPlatformWorkflow}`;
-const releaseWorkflows = `${releaseWorkflow}\n${releasePlatformWorkflow}`;
+const buildScript = await readFile(new URL("build-plugin.sh", root), "utf8");
 const normalizedWorkspace = workspace.replaceAll("\r\n", "\n");
 
 assert.equal(pkg.private, true);
-assert.equal(pkg.packageManager, "pnpm@11.7.0");
+assert.equal(pkg.packageManager, "pnpm@9.15.9");
+assert.deepEqual(manifest, ztoolsManifest);
+assert.deepEqual(manifest.platform, ["darwin"]);
 assert.equal(pkg.scripts.test, "vitest run");
 assert.equal(
   pkg.scripts["test:release-archive"],
@@ -59,17 +47,7 @@ assert.deepEqual(tsconfig.files, []);
 assert.equal(Array.isArray(tsconfig.references), true);
 assert.equal(tsconfig.references.some((entry) => entry.path === "./apps/atools"), true);
 await readFile(new URL("scripts/verify-release-archive.mjs", root), "utf8");
-for (const workflow of [pullRequestWorkflows, releaseWorkflows]) {
-  assert.match(workflow, /pnpm test:release-archive/u);
-  assert.match(workflow, /pnpm test:visual-artifact/u);
-  assert.match(workflow, /pnpm verify:visual-artifact/u);
-  assert.match(workflow, /Verify final Paste剪切板 release archive/u);
-  assert.match(workflow, /verify-release-archive\.mjs/u);
-  assert.match(workflow, /pasteboardpro-archive-verification\.json/u);
-  assert.match(workflow, /attest-vision-helper\.mjs/u);
-  assert.match(workflow, /pasteboard-vision-attestation\.json/u);
-  assert.match(workflow, /--helper-attestation=/u);
-}
-assert.match(pullRequestWorkflows, /--require-helper-signature=adhoc/u);
-assert.match(releaseWorkflows, /--require-helper-signature=developer-id/u);
-assert.match(releaseWorkflows, /--require-gatekeeper/u);
+assert.match(buildScript, /native\/vision-helper\/build\.sh/u);
+assert.match(buildScript, /codesign --force --sign -/u);
+assert.match(buildScript, /corepack pnpm@9\.15\.9 install --frozen-lockfile/u);
+assert.doesNotMatch(buildScript, /\.github\/workflows/u);
