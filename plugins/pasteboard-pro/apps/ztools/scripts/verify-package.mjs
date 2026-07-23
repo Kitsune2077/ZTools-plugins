@@ -29,6 +29,7 @@ assert.equal(
   "@(pasteboard-vision|paste-stack-key-monitor.py)",
 );
 assert.equal(manifest.logo, "logo.png");
+assert.deepEqual(manifest.pluginSetting, { backgroundRunning: true });
 assert.deepEqual(manifest.platform, ["darwin", "win32", "linux"]);
 assert.deepEqual(manifest.categories, ["productivity"]);
 assert.equal("development" in manifest, false);
@@ -52,6 +53,7 @@ assert.deepEqual(preloadPackage, { type: "commonjs" });
 for (const path of [
   "index.html",
   "public/logo.png",
+  "preload/auto-start.ts",
   "preload/index.ts",
   "preload/ocr.ts",
   "preload/paste-item.ts",

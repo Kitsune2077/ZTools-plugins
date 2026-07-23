@@ -8,6 +8,7 @@ import {
   type HostClipboardApi,
   type ZToolsDocumentDatabase,
 } from "./clipboard-store";
+import { ensureZToolsAutoStart } from "./auto-start";
 import type { PasteStackState } from "@pasteboard-pro/core";
 import { createOcrClient } from "./ocr";
 import { openQuickLook } from "./quick-look";
@@ -70,6 +71,7 @@ type IpcRendererLike = Readonly<{
     channel: string,
     listener: (event: unknown, ...args: unknown[]) => void,
   ): void;
+  invoke(channel: string, ...args: unknown[]): Promise<unknown>;
 }>;
 
 const { clipboard, ipcRenderer, nativeImage } = require("electron") as {
@@ -395,6 +397,10 @@ function scheduleHistoryMirror(): void {
 }
 
 if (isPrimaryWindow) {
+  void ensureZToolsAutoStart(ipcRenderer).catch((error: unknown) => {
+    console.warn("Paste剪切板自动启动登记失败", error);
+  });
+
   ipcRenderer.on(PANEL_REQUEST_CHANNEL, (_event, value) => {
     const request = parsedPanelRequest(value);
     if (request !== undefined) panelWindows.open(activeDisplay(), request);
@@ -446,6 +452,7 @@ if (isPrimaryWindow) {
   });
 
   ztools.clipboard.onChange(scheduleHistoryMirror);
+  scheduleHistoryMirror();
 
   ztools.setSubInput?.(
     (details) => {

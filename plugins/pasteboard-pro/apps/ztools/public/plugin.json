@@ -9,6 +9,9 @@
   "preload": "preload.js",
   "unpack": "@(pasteboard-vision|paste-stack-key-monitor.py)",
   "logo": "logo.png",
+  "pluginSetting": {
+    "backgroundRunning": true
+  },
   "platform": ["darwin", "win32", "linux"],
   "categories": ["productivity"],
   "features": [
