@@ -11,6 +11,7 @@ import {
 import { ensureZToolsAutoStart } from "./auto-start";
 import type { PasteStackState } from "@pasteboard-pro/core";
 import { createOcrClient } from "./ocr";
+import { NativeFileDragService } from "./native-file-drag";
 import { openQuickLook } from "./quick-look";
 import { rotateImageFile } from "./image-rotation";
 import { createKeychainSecretStore } from "./keychain";
@@ -93,6 +94,7 @@ type ZToolsHost = Readonly<{
     handler: (input?: unknown) => Promise<unknown>,
   ): void;
   getNativeId(): string;
+  startDrag(file: string | string[]): void;
   clipboard: HostClipboardApi &
     ClipboardPasteHost &
     Readonly<{
@@ -146,6 +148,8 @@ type PasteboardProBridge = Readonly<{
   ): Promise<unknown[]>;
   getItemPreview(itemId: string): Promise<Readonly<{ mediaType: string; dataBase64: string }> | null>;
   getItemThumbnails(itemIds: readonly string[]): Promise<ItemThumbnail[]>;
+  prepareNativeFileDrag(itemId: string): Promise<boolean>;
+  startNativeFileDrag(itemId: string): boolean;
   recognizeItem(itemId: string): Promise<string>;
   rotateImage(itemId: string, quarterTurns: -1 | 1): Promise<unknown>;
   quickLookItem(itemId: string): Promise<void>;
@@ -188,6 +192,7 @@ const syncRepository = new ZToolsSyncEntityRepository(
 const shelfWindows = new ShelfWindowManager(ztools);
 const panelWindows = new PanelWindowManager(ztools);
 const thumbnailService = new ThumbnailService(store, nativeImage);
+const nativeFileDragService = new NativeFileDragService(store, ztools);
 const ocrClient = createOcrClient({
   helperPath: path.join(__dirname, "pasteboard-vision"),
 });
@@ -480,8 +485,15 @@ if (isPrimaryWindow) {
 }
 
 const bridge: PasteboardProBridge = {
-  searchHistory: (query = "", limit = 1_000) =>
-    store.search(query, Math.max(1, Math.min(10_000, Math.floor(limit)))),
+  async searchHistory(query = "", limit = 1_000) {
+    const normalizedLimit = Math.max(1, Math.min(10_000, Math.floor(limit)));
+    const [result, records] = await Promise.all([
+      store.search(query, normalizedLimit),
+      store.listRecords(),
+    ]);
+    nativeFileDragService.refresh(records);
+    return result;
+  },
   getPrivacySettings: () => privacyStore.get(),
   async savePrivacySettings(settings) {
     await privacyStore.put(settings);
@@ -605,6 +617,8 @@ const bridge: PasteboardProBridge = {
     return { mediaType, dataBase64: bytes.toString("base64") };
   },
   getItemThumbnails: (itemIds) => thumbnailService.get(itemIds),
+  prepareNativeFileDrag: (itemId) => nativeFileDragService.prepare(itemId),
+  startNativeFileDrag: (itemId) => nativeFileDragService.start(itemId),
   async recognizeItem(itemId) {
     if (process.platform !== "darwin") {
       throw new Error("本地 Vision OCR 仅支持 macOS");

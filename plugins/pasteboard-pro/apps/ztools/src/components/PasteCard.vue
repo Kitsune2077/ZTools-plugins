@@ -33,6 +33,24 @@ function beginDrag(event: DragEvent): void {
   }
 }
 
+function prepareNativeFileDrag(): void {
+  if (props.item.kind !== "image" && props.item.payload.filePaths === undefined) return;
+  const preparation = window.pasteboardPro?.prepareNativeFileDrag(props.item.id);
+  if (preparation !== undefined) {
+    void preparation.catch(() => undefined);
+  }
+}
+
+function beginNativeFileDrag(event: DragEvent): void {
+  event.dataTransfer?.setData("application/x-pasteboard-pro-item", props.item.id);
+  if (event.dataTransfer !== null) {
+    event.dataTransfer.effectAllowed = "copy";
+  }
+  if (window.pasteboardPro?.startNativeFileDrag(props.item.id) === true) {
+    event.stopPropagation();
+  }
+}
+
 const bodyText = computed(() => {
   if (props.item.payload.text !== undefined) return props.item.payload.text;
   if (props.item.payload.filePaths !== undefined) {
@@ -49,6 +67,7 @@ async function loadThumbnail(): Promise<void> {
     props.item.id,
     props.item.payload.revision,
   );
+  prepareNativeFileDrag();
 }
 
 onMounted(() => {
@@ -96,11 +115,19 @@ onBeforeUnmount(() => stopObservingThumbnail?.());
         :src="thumbnailUrl"
         :alt="item.title ?? '剪贴板图片缩略图'"
         decoding="async"
-        draggable="false"
+        draggable="true"
+        @pointerdown="prepareNativeFileDrag"
+        @dragstart="beginNativeFileDrag"
       />
       <span v-else>IMAGE</span>
     </div>
-    <p v-else>{{ bodyText }}</p>
+    <p
+      v-else
+      :class="{ 'file-drag-source': item.payload.filePaths !== undefined }"
+      :draggable="item.payload.filePaths !== undefined"
+      @pointerdown="prepareNativeFileDrag"
+      @dragstart="beginNativeFileDrag"
+    >{{ bodyText }}</p>
     <footer>
       <strong>{{ item.title ?? item.sourceApp?.name ?? "Untitled" }}</strong>
       <span>{{ item.sourceApp?.name ?? "Unknown app" }}</span>
@@ -242,7 +269,20 @@ p {
   width: 100%;
   height: 100%;
   min-height: 62px;
+  cursor: grab;
   object-fit: cover;
+}
+
+.image-preview img:active {
+  cursor: grabbing;
+}
+
+.file-drag-source {
+  cursor: grab;
+}
+
+.file-drag-source:active {
+  cursor: grabbing;
 }
 
 footer {

@@ -49,6 +49,8 @@ declare global {
         mediaType: string;
         dataBase64: string;
       }>>;
+      prepareNativeFileDrag(itemId: string): Promise<boolean>;
+      startNativeFileDrag(itemId: string): boolean;
       recognizeItem(itemId: string): Promise<string>;
       rotateImage(itemId: string, quarterTurns: -1 | 1): Promise<unknown>;
       quickLookItem(itemId: string): Promise<void>;
