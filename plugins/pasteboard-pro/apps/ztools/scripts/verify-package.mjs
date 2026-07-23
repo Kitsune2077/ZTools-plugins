@@ -38,9 +38,16 @@ const entryFeature = manifest.features.find(
   (feature) => feature.code === "pasteboard-pro",
 );
 assert.ok(entryFeature);
-assert.ok(entryFeature.cmds.includes("剪贴板"));
 assert.ok(entryFeature.cmds.includes("Paste剪切板"));
-assert.ok(entryFeature.cmds.includes("PasteboardPro"));
+const aliasCommand = entryFeature.cmds.find(
+  (command) => typeof command === "object" && command.type === "regex",
+);
+assert.deepEqual(aliasCommand, {
+  type: "regex",
+  label: "Paste剪切板",
+  match: "^(?:剪贴板|Pasteboard\\s*Pro|pasteboardpro|paste|clipboard)$",
+});
+assert.equal(entryFeature.cmds.includes("PasteboardPro"), false);
 
 const searchTool = manifest.tools.search_history;
 assert.equal(searchTool.inputSchema.additionalProperties, false);

@@ -19,7 +19,14 @@
       "code": "pasteboard-pro",
       "explain": "打开 Paste剪切板历史",
       "icon": "logo.png",
-      "cmds": ["Paste剪切板", "剪贴板", "PasteboardPro", "paste", "clipboard"]
+      "cmds": [
+        "Paste剪切板",
+        {
+          "type": "regex",
+          "label": "Paste剪切板",
+          "match": "^(?:剪贴板|Pasteboard\\s*Pro|pasteboardpro|paste|clipboard)$"
+        }
+      ]
     }
   ],
   "tools": {
