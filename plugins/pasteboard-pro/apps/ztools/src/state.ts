@@ -293,9 +293,8 @@ export class PasteboardState {
       }
 
       if (event.key === "Enter") {
-        const selected = orderedIds.filter((id) =>
-          this.selection.selected.includes(id),
-        );
+        const available = new Set(orderedIds);
+        const selected = this.selection.selected.filter((id) => available.has(id));
         return selected.length === 0
           ? null
           : { type: "paste", itemIds: selected, plainText: false };
@@ -310,9 +309,8 @@ export class PasteboardState {
     }
 
     if (!event.metaKey && event.shiftKey && !event.altKey && event.key === "Enter") {
-      const selected = orderedIds.filter((id) =>
-        this.selection.selected.includes(id),
-      );
+      const available = new Set(orderedIds);
+      const selected = this.selection.selected.filter((id) => available.has(id));
       return selected.length === 0
         ? null
         : { type: "paste", itemIds: selected, plainText: true };

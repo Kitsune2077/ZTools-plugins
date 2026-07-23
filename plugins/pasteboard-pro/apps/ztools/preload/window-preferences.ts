@@ -3,13 +3,16 @@ import type { DockEdge } from "@pasteboard-pro/design-tokens";
 import type { ZToolsDocumentDatabase } from "./clipboard-store";
 
 export type ShelfDockEdge = Exclude<DockEdge, "floating">;
+export type MultiPasteMode = "batch" | "queue";
 
 export type WindowPreferences = Readonly<{
   dockEdge: ShelfDockEdge;
+  multiPasteMode: MultiPasteMode;
 }>;
 
 export const defaultWindowPreferences: WindowPreferences = {
   dockEdge: "bottom",
+  multiPasteMode: "batch",
 };
 
 const WINDOW_PREFERENCES_ID = "pasteboard-pro:settings:window";
@@ -29,10 +32,19 @@ function isShelfDockEdge(value: unknown): value is ShelfDockEdge {
   return value === "top" || value === "bottom" || value === "left" || value === "right";
 }
 
+function isMultiPasteMode(value: unknown): value is MultiPasteMode {
+  return value === "batch" || value === "queue";
+}
+
 function parseWindowPreferences(value: unknown): WindowPreferences | undefined {
   if (!isRecord(value) || !isRecord(value.settings)) return undefined;
   return isShelfDockEdge(value.settings.dockEdge)
-    ? { dockEdge: value.settings.dockEdge }
+    ? {
+        dockEdge: value.settings.dockEdge,
+        multiPasteMode: isMultiPasteMode(value.settings.multiPasteMode)
+          ? value.settings.multiPasteMode
+          : defaultWindowPreferences.multiPasteMode,
+      }
     : undefined;
 }
 
@@ -56,6 +68,9 @@ export class ZToolsWindowPreferencesStore {
   async put(settings: WindowPreferences): Promise<void> {
     if (!isShelfDockEdge(settings.dockEdge)) {
       throw new TypeError("Shelf dock edge must be top, bottom, left, or right");
+    }
+    if (!isMultiPasteMode(settings.multiPasteMode)) {
+      throw new TypeError("Multi-paste mode must be batch or queue");
     }
 
     for (let attempt = 0; attempt < 3; attempt += 1) {

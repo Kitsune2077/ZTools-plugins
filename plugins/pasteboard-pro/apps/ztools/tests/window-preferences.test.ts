@@ -33,8 +33,25 @@ describe("ZTools window preferences", () => {
       },
     });
 
-    await store.put({ dockEdge: "left" });
-    await expect(store.get()).resolves.toEqual({ dockEdge: "left" });
+    await store.put({ dockEdge: "left", multiPasteMode: "queue" });
+    await expect(store.get()).resolves.toEqual({
+      dockEdge: "left",
+      multiPasteMode: "queue",
+    });
+  });
+
+  it("migrates an existing dock-only preference to batch multi-paste", async () => {
+    const store = new ZToolsWindowPreferencesStore({
+      async get() {
+        return { settings: { dockEdge: "top" } };
+      },
+      async put() { return { ok: true }; },
+    });
+
+    await expect(store.get()).resolves.toEqual({
+      dockEdge: "top",
+      multiPasteMode: "batch",
+    });
   });
 
   it("rejects invalid persisted and requested edges safely", async () => {

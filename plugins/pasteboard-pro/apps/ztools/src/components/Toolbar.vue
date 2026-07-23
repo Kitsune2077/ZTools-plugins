@@ -14,7 +14,6 @@ const emit = defineEmits<{
   "update:query": [value: string];
   togglePause: [];
   toggleCompact: [];
-  openSyncSettings: [];
   openPrivacySettings: [];
   createText: [];
 }>();
@@ -32,20 +31,11 @@ const emit = defineEmits<{
       <button
         type="button"
         class="tool-button"
-        title="隐私与历史保留"
+        title="打开设置中心"
         @click="emit('openPrivacySettings')"
       >
         <span aria-hidden="true">⚙</span>
         设置
-      </button>
-      <button
-        type="button"
-        class="tool-button"
-        title="同步设置"
-        @click="emit('openSyncSettings')"
-      >
-        <span aria-hidden="true">↻</span>
-        同步
       </button>
       <button
         type="button"

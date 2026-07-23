@@ -21,10 +21,10 @@ import {
 } from "../preload/window-preferences";
 
 import Shelf from "./components/Shelf.vue";
-import PrivacySettingsPanel from "./components/PrivacySettings.vue";
 import Preview from "./components/Preview.vue";
-import SyncSettingsPanel from "./components/SyncSettings.vue";
+import SettingsPanel from "./components/SettingsPanel.vue";
 import TextEditor from "./components/TextEditor.vue";
+import { combinedTextPasteContent } from "./batch-paste";
 import {
   createPasteboardState,
   pasteStackSnapshot,
@@ -63,12 +63,11 @@ const activePinboardId = ref<string>();
 const previewItemId = ref<string>();
 const status = ref("本地历史已就绪");
 const syncSettings = ref<SyncSettings>(structuredClone(defaultSyncSettings));
-const syncSettingsOpen = ref(false);
-const syncSettingsSaving = ref(false);
 const privacySettings = ref<PrivacySettings>(structuredClone(defaultPrivacySettings));
 const windowPreferences = ref<WindowPreferences>(structuredClone(defaultWindowPreferences));
-const privacySettingsOpen = ref(false);
-const privacySettingsSaving = ref(false);
+const settingsOpen = ref(false);
+const settingsSaving = ref(false);
+const settingsInitialTab = ref<"general" | "privacy" | "sync">("general");
 const editor = ref<{
   mode: "create" | "edit" | "rename";
   itemId?: string;
@@ -115,7 +114,9 @@ function selectItem(itemId: string, extend: boolean, toggle: boolean): void {
   } else {
     state.replaceSelection(itemId);
   }
-  void syncPasteStackToSelection();
+  if (state.pasteStack.itemIds.length > 0) {
+    void updatePasteStack({ type: "clear" });
+  }
 }
 
 function focusLatestItem(itemId: string): void {
@@ -145,6 +146,27 @@ async function pasteItem(
 }
 
 async function pasteItems(itemIds: readonly string[], plainText = false): Promise<void> {
+  const items = itemIds.flatMap((itemId) => {
+    const item = visibleItems.value.find((candidate) => candidate.id === itemId);
+    return item === undefined ? [] : [item];
+  });
+  const combinedContent =
+    items.length === itemIds.length && items.length > 1
+      ? combinedTextPasteContent(items)
+      : undefined;
+  if (combinedContent !== undefined) {
+    try {
+      const result = await window.pasteboardPro?.pasteContent(combinedContent);
+      status.value =
+        result?.status === "accessibility_required"
+          ? "已复制多条内容；授权辅助功能后可直接粘贴"
+          : `已一次性粘贴 ${items.length} 条内容`;
+      if (isShelfMode) window.close();
+    } catch (error) {
+      status.value = error instanceof Error ? error.message : "批量粘贴失败";
+    }
+    return;
+  }
   for (const itemId of itemIds) {
     await pasteItem(itemId, plainText, false);
   }
@@ -238,17 +260,32 @@ function onPasteStackChanged(event: Event): void {
   state.setPasteStack(detail, true);
 }
 
-function handleEffect(effect: PasteboardKeyboardEffect | null): void {
+async function handleEffect(effect: PasteboardKeyboardEffect | null): Promise<void> {
   if (effect === null) return;
   if (effect.type === "preview") {
     openPreview(effect.itemId);
     return;
   }
   if (effect.type === "quick-paste") {
-    void pasteItem(effect.itemId, effect.plainText);
-  } else {
-    void pasteItems(effect.itemIds, effect.plainText);
+    if (state.pasteStack.itemIds.length > 0) {
+      await updatePasteStack({ type: "clear" });
+    }
+    await pasteItem(effect.itemId, effect.plainText);
+    return;
   }
+  if (
+    effect.itemIds.length > 1 &&
+    !effect.plainText &&
+    windowPreferences.value.multiPasteMode === "queue"
+  ) {
+    await syncPasteStackToSelection();
+    if (isShelfMode) window.close();
+    return;
+  }
+  if (state.pasteStack.itemIds.length > 0) {
+    await updatePasteStack({ type: "clear" });
+  }
+  await pasteItems(effect.itemIds, effect.plainText);
 }
 
 function onKeydown(event: KeyboardEvent): void {
@@ -310,10 +347,10 @@ function onKeydown(event: KeyboardEvent): void {
   ) {
     event.preventDefault();
   }
-  if (selectionChanged) {
-    void syncPasteStackToSelection();
+  if (selectionChanged && state.pasteStack.itemIds.length > 0) {
+    void updatePasteStack({ type: "clear" });
   }
-  handleEffect(effect);
+  void handleEffect(effect);
 }
 
 async function togglePause(): Promise<void> {
@@ -432,29 +469,27 @@ async function quickLookItem(itemId: string): Promise<void> {
   }
 }
 
-async function openSyncSettings(): Promise<void> {
-  if (panelMode === undefined && window.pasteboardPro !== undefined) {
-    window.pasteboardPro.openPanel("sync");
-    return;
-  }
-  syncSettings.value =
-    (await window.pasteboardPro?.getSyncSettings()) ?? structuredClone(defaultSyncSettings);
-  syncSettingsOpen.value = true;
+type SettingsTab = "general" | "privacy" | "sync";
+
+async function loadSettings(tab: SettingsTab): Promise<void> {
+  const [privacy, preferences, sync] = await Promise.all([
+    window.pasteboardPro?.getPrivacySettings(),
+    window.pasteboardPro?.getWindowPreferences(),
+    window.pasteboardPro?.getSyncSettings(),
+  ]);
+  privacySettings.value = privacy ?? structuredClone(defaultPrivacySettings);
+  windowPreferences.value = preferences ?? structuredClone(defaultWindowPreferences);
+  syncSettings.value = sync ?? structuredClone(defaultSyncSettings);
+  settingsInitialTab.value = tab;
+  settingsOpen.value = true;
 }
 
-async function saveSyncSettings(input: SaveSyncConfigurationInput): Promise<void> {
-  syncSettingsSaving.value = true;
-  try {
-    const saved = await window.pasteboardPro?.saveSyncSettings(input);
-    if (saved !== undefined) syncSettings.value = saved;
-    status.value = input.enabled ? "同步设置已保存" : "云同步已关闭";
-    if (panelMode === "sync") window.close();
-    else syncSettingsOpen.value = false;
-  } catch (error) {
-    status.value = error instanceof Error ? error.message : "同步设置保存失败";
-  } finally {
-    syncSettingsSaving.value = false;
+async function openSettings(tab: SettingsTab): Promise<void> {
+  if (panelMode === undefined && window.pasteboardPro !== undefined) {
+    window.pasteboardPro.openPanel(tab === "sync" ? "sync" : "privacy", { tab });
+    return;
   }
+  await loadSettings(tab);
 }
 
 async function retrySync(): Promise<void> {
@@ -464,50 +499,57 @@ async function retrySync(): Promise<void> {
   status.value = settings?.status.state === "success" ? "同步完成" : "同步仍需处理";
 }
 
-async function openPrivacySettings(): Promise<void> {
-  if (panelMode === undefined && window.pasteboardPro !== undefined) {
-    window.pasteboardPro.openPanel("privacy");
-    return;
-  }
-  const [settings, preferences] = await Promise.all([
-    window.pasteboardPro?.getPrivacySettings(),
-    window.pasteboardPro?.getWindowPreferences(),
-  ]);
-  privacySettings.value = settings ?? structuredClone(defaultPrivacySettings);
-  windowPreferences.value = preferences ?? structuredClone(defaultWindowPreferences);
-  privacySettingsOpen.value = true;
+function openPrivacySettings(): void {
+  void openSettings("general");
 }
 
-async function savePrivacySettings(
+async function saveSettings(
   settings: PrivacySettings,
   preferences: WindowPreferences,
+  syncInput: SaveSyncConfigurationInput,
 ): Promise<void> {
-  privacySettingsSaving.value = true;
+  settingsSaving.value = true;
   try {
-    const [saved, savedPreferences] = await Promise.all([
+    const currentSync = syncSettings.value;
+    const syncChanged =
+      syncInput.enabled !== currentSync.enabled ||
+      syncInput.baseUrl.trim() !== currentSync.baseUrl ||
+      syncInput.username.trim() !== currentSync.username ||
+      syncInput.syncFileContents !== currentSync.syncFileContents ||
+      syncInput.webdavPassword !== undefined ||
+      syncInput.syncPassword !== undefined;
+    const [saved, savedPreferences, savedSync] = await Promise.all([
       window.pasteboardPro?.savePrivacySettings(settings),
       window.pasteboardPro?.saveWindowPreferences(preferences),
+      syncChanged
+        ? window.pasteboardPro?.saveSyncSettings(syncInput)
+        : Promise.resolve(undefined),
     ]);
     privacySettings.value = saved ?? settings;
     windowPreferences.value = savedPreferences ?? preferences;
+    if (savedSync !== undefined) syncSettings.value = savedSync;
+    if (
+      windowPreferences.value.multiPasteMode === "batch" &&
+      state.pasteStack.itemIds.length > 0
+    ) {
+      await updatePasteStack({ type: "clear" });
+    }
     paused.value = privacySettings.value.pause.paused;
-    if (panelMode === "privacy") window.close();
-    else privacySettingsOpen.value = false;
-    status.value = "隐私与历史保留设置已保存";
+    status.value = "设置已保存";
+    closeSettings();
   } catch (error) {
-    status.value = error instanceof Error ? error.message : "隐私设置保存失败";
+    status.value = error instanceof Error ? error.message : "设置保存失败";
   } finally {
-    privacySettingsSaving.value = false;
+    settingsSaving.value = false;
   }
 }
 
-function closeSettings(target: "privacy" | "sync"): void {
-  if (panelMode === target) {
+function closeSettings(): void {
+  if (panelMode === "privacy" || panelMode === "sync") {
     window.close();
     return;
   }
-  if (target === "privacy") privacySettingsOpen.value = false;
-  else syncSettingsOpen.value = false;
+  settingsOpen.value = false;
 }
 
 function closeWindow(): void {
@@ -531,20 +573,15 @@ onMounted(async () => {
     window.addEventListener("focus", onWindowFocus);
     window.addEventListener("blur", onWindowBlur);
   }
-  if (panelMode === "sync") {
-    syncSettings.value =
-      (await window.pasteboardPro?.getSyncSettings()) ?? structuredClone(defaultSyncSettings);
-    syncSettingsOpen.value = true;
-    return;
-  }
-  if (panelMode === "privacy") {
-    const [settings, preferences] = await Promise.all([
-      window.pasteboardPro?.getPrivacySettings(),
-      window.pasteboardPro?.getWindowPreferences(),
-    ]);
-    privacySettings.value = settings ?? structuredClone(defaultPrivacySettings);
-    windowPreferences.value = preferences ?? structuredClone(defaultWindowPreferences);
-    privacySettingsOpen.value = true;
+  if (panelMode === "sync" || panelMode === "privacy") {
+    const requestedTab = params.get("tab");
+    await loadSettings(
+      panelMode === "sync"
+        ? "sync"
+        : requestedTab === "privacy"
+          ? "privacy"
+          : "general",
+    );
     return;
   }
   if (panelMode === "preview") {
@@ -631,29 +668,22 @@ onBeforeUnmount(() => {
       @toggle-compact="state.setDensity(state.density === 'compact' ? 'expanded' : 'compact')"
       @toggle-stack-direction="updatePasteStack({ type: 'set-direction', direction: state.pasteStack.direction === 'forward' ? 'reverse' : 'forward' })"
       @clear-stack="updatePasteStack({ type: 'clear' })"
-      @open-sync-settings="openSyncSettings"
       @open-privacy-settings="openPrivacySettings"
       @create-text="createTextItem"
       @edit-item="editItem"
       @rename-item="renameItem"
     />
-    <SyncSettingsPanel
-      v-if="syncSettingsOpen && (panelMode === undefined || panelMode === 'sync')"
-      :standalone="panelMode === 'sync'"
-      :settings="syncSettings"
-      :saving="syncSettingsSaving"
-      @close="closeSettings('sync')"
-      @save="saveSyncSettings"
-      @retry="retrySync"
-    />
-    <PrivacySettingsPanel
-      v-if="privacySettingsOpen && (panelMode === undefined || panelMode === 'privacy')"
-      :standalone="panelMode === 'privacy'"
-      :settings="privacySettings"
+    <SettingsPanel
+      v-if="settingsOpen && (panelMode === undefined || panelMode === 'privacy' || panelMode === 'sync')"
+      :standalone="panelMode === 'privacy' || panelMode === 'sync'"
+      :initial-tab="settingsInitialTab"
+      :privacy-settings="privacySettings"
+      :sync-settings="syncSettings"
       :window-preferences="windowPreferences"
-      :saving="privacySettingsSaving"
-      @close="closeSettings('privacy')"
-      @save="savePrivacySettings"
+      :saving="settingsSaving"
+      @close="closeSettings"
+      @save="saveSettings"
+      @retry="retrySync"
     />
     <TextEditor
       v-if="panelMode === 'editor' && editor"

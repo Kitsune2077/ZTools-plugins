@@ -175,6 +175,18 @@ describe("Vue canonical state", () => {
     state.toggleSelection(thirdId);
     state.toggleSelection(secondId);
     expect(state.selectionPasteQueue()).toEqual([firstId, thirdId, secondId]);
+    expect(
+      state.handleKeyboard({
+        key: "Enter",
+        metaKey: false,
+        shiftKey: false,
+        altKey: false,
+      }),
+    ).toEqual({
+      type: "paste",
+      itemIds: [firstId, thirdId, secondId],
+      plainText: false,
+    });
   });
 
   it("clears selection when the active paste queue is consumed", () => {
