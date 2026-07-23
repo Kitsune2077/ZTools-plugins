@@ -1,6 +1,6 @@
 {
   "name": "myPlugins",
-  "version": "2.5.0",
+  "version": "2.5.1",
   "description": "开发百宝箱，提供随机生成、编码转换、文本压缩、开发辅助等常用工具集",
   "type": "module",
   "scripts": {
