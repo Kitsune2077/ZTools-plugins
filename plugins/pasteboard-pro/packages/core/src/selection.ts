@@ -98,8 +98,9 @@ export function reduceSelection(
       const rangeStart = Math.min(anchorIndex, nextFocusIndex);
       const rangeEnd = Math.max(anchorIndex, nextFocusIndex);
 
+      const range = orderedIds.slice(rangeStart, rangeEnd + 1);
       return selectedState(
-        orderedIds.slice(rangeStart, rangeEnd + 1),
+        nextFocusIndex < anchorIndex ? range.reverse() : range,
         anchor,
         nextFocus,
       );
@@ -107,8 +108,8 @@ export function reduceSelection(
 
     case "restore": {
       const orderedIds = uniqueIds(action.orderedIds);
-      const selected = new Set(state.selected);
-      const retained = orderedIds.filter((id) => selected.has(id));
+      const orderedSet = new Set(orderedIds);
+      const retained = uniqueIds(state.selected).filter((id) => orderedSet.has(id));
 
       if (retained.length > 0) {
         const firstRetained = retained[0]!;

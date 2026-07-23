@@ -229,6 +229,10 @@ export class PasteboardState {
     this.pasteStack = clonePasteStack(pasteStack);
   }
 
+  selectionPasteQueue(): string[] {
+    return this.selection.selected.length > 1 ? [...this.selection.selected] : [];
+  }
+
   setDockEdge(edge: DockEdge): void {
     this.dockEdge = edge;
   }

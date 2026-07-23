@@ -61,6 +61,26 @@ describe("reduceSelection", () => {
     });
   });
 
+  it("keeps a reverse range in the order selected from its anchor", () => {
+    let state = reduceSelection(
+      { selected: [] },
+      { type: "replace", itemId: "f" },
+    );
+    for (let step = 0; step < 5; step += 1) {
+      state = reduceSelection(state, {
+        type: "extend",
+        orderedIds: ["a", "b", "c", "d", "e", "f"],
+        direction: -1,
+      });
+    }
+
+    expect(state).toEqual({
+      selected: ["f", "e", "d", "c", "b", "a"],
+      anchor: "f",
+      focus: "a",
+    });
+  });
+
   it("toggles items while preserving valid anchor and focus fallbacks", () => {
     const added = reduceSelection(
       { selected: ["a"], anchor: "a", focus: "a" },
@@ -140,7 +160,7 @@ describe("reduceSelection", () => {
     ).toEqual({ selected: [] });
   });
 
-  it("restores retained IDs in current order and repairs removed endpoints", () => {
+  it("restores retained IDs in selection order and repairs removed endpoints", () => {
     expect(
       reduceSelection(
         {
@@ -155,8 +175,8 @@ describe("reduceSelection", () => {
         },
       ),
     ).toEqual({
-      selected: ["a", "c"],
-      anchor: "a",
+      selected: ["c", "a"],
+      anchor: "c",
       focus: "c",
     });
   });

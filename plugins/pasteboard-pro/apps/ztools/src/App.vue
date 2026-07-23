@@ -107,13 +107,12 @@ function updateQuery(value: string): void {
 function selectItem(itemId: string, extend: boolean, toggle: boolean): void {
   if (extend) {
     state.extendSelectionTo(itemId);
-    return;
-  }
-  if (toggle) {
+  } else if (toggle) {
     state.toggleSelection(itemId);
-    return;
+  } else {
+    state.replaceSelection(itemId);
   }
-  state.replaceSelection(itemId);
+  void syncPasteStackToSelection();
 }
 
 function focusLatestItem(itemId: string): void {
@@ -217,12 +216,15 @@ async function updatePasteStack(action: PasteStackAction): Promise<void> {
   await persistPasteStack();
 }
 
-async function addSelectionToStack(): Promise<void> {
-  if (state.selection.selected.length === 0) return;
-  state.dispatchPasteStack({ type: "append", itemIds: state.selection.selected });
+async function syncPasteStackToSelection(): Promise<void> {
+  const itemIds = state.selectionPasteQueue();
+  state.dispatchPasteStack({ type: "set-direction", direction: "forward" });
+  state.dispatchPasteStack({ type: "replace", itemIds });
   try {
     await persistPasteStack();
-    status.value = `已将 ${state.pasteStack.itemIds.length} 项加入粘贴队列，可连续按 Command-V 逐项粘贴`;
+    if (itemIds.length > 1) {
+      status.value = `已按选择顺序生成 ${itemIds.length} 项粘贴队列`;
+    }
   } catch (error) {
     status.value = error instanceof Error ? error.message : "粘贴队列保存失败";
   }
@@ -301,11 +303,6 @@ function onKeydown(event: KeyboardEvent): void {
   if (isTextControl && event.key !== "Enter") {
     return;
   }
-  if (event.metaKey && event.shiftKey && event.key.toLowerCase() === "c") {
-    event.preventDefault();
-    void addSelectionToStack();
-    return;
-  }
   if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === "c") {
     event.preventDefault();
     void copySelection();
@@ -331,14 +328,23 @@ function onKeydown(event: KeyboardEvent): void {
     renameItem(focusedItem.value.id);
     return;
   }
+  const previousSelection = state.selection.selected.join("\0");
   const effect = state.handleKeyboard({
     key: event.key,
     metaKey: event.metaKey,
     shiftKey: event.shiftKey,
     altKey: event.altKey,
   });
-  if (effect !== null || ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Escape"].includes(event.key)) {
+  const selectionChanged = state.selection.selected.join("\0") !== previousSelection;
+  if (
+    effect !== null ||
+    selectionChanged ||
+    ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Escape"].includes(event.key)
+  ) {
     event.preventDefault();
+  }
+  if (selectionChanged) {
+    void syncPasteStackToSelection();
   }
   handleEffect(effect);
 }
@@ -655,7 +661,6 @@ onBeforeUnmount(() => {
       @delete-pinboard="deletePinboard"
       @assign-pinboard="assignPinboard"
       @toggle-pause="togglePause"
-      @add-stack="addSelectionToStack"
       @toggle-compact="state.setDensity(state.density === 'compact' ? 'expanded' : 'compact')"
       @toggle-stack-direction="updatePasteStack({ type: 'set-direction', direction: state.pasteStack.direction === 'forward' ? 'reverse' : 'forward' })"
       @clear-stack="updatePasteStack({ type: 'clear' })"

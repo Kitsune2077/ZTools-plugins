@@ -42,7 +42,6 @@ const emit = defineEmits<{
   toggleStackDirection: [];
   clearStack: [];
   openSyncSettings: [];
-  addStack: [];
   openPrivacySettings: [];
   createText: [];
 }>();
@@ -82,7 +81,6 @@ function forwardAssignPinboard(
       @toggle-pause="emit('togglePause')"
       @toggle-compact="emit('toggleCompact')"
       @open-sync-settings="emit('openSyncSettings')"
-      @add-stack="emit('addStack')"
       @open-privacy-settings="emit('openPrivacySettings')"
       @create-text="emit('createText')"
     />

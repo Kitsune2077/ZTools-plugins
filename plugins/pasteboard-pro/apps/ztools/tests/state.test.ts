@@ -141,6 +141,28 @@ describe("Vue canonical state", () => {
       }),
     ).toEqual({ type: "preview", itemId: secondId });
   });
+
+  it("uses range direction and explicit selection order as the automatic paste queue", () => {
+    const state = createPasteboardState({ items: historyFixture });
+    const [firstId, secondId, thirdId] = state.visibleItems.map((item) => item.id);
+    if (firstId === undefined || secondId === undefined || thirdId === undefined) {
+      throw new Error("Expected at least three history fixtures");
+    }
+
+    state.replaceSelection(firstId);
+    expect(state.selectionPasteQueue()).toEqual([]);
+    state.extendSelectionTo(thirdId);
+    expect(state.selectionPasteQueue()).toEqual([firstId, secondId, thirdId]);
+
+    state.replaceSelection(thirdId);
+    state.extendSelectionTo(firstId);
+    expect(state.selectionPasteQueue()).toEqual([thirdId, secondId, firstId]);
+
+    state.replaceSelection(firstId);
+    state.toggleSelection(thirdId);
+    state.toggleSelection(secondId);
+    expect(state.selectionPasteQueue()).toEqual([firstId, thirdId, secondId]);
+  });
 });
 
 describe("visual state", () => {

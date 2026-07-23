@@ -15,7 +15,6 @@ const emit = defineEmits<{
   togglePause: [];
   toggleCompact: [];
   openSyncSettings: [];
-  addStack: [];
   openPrivacySettings: [];
   createText: [];
 }>();
@@ -38,15 +37,6 @@ const emit = defineEmits<{
       >
         <span aria-hidden="true">⚙</span>
         设置
-      </button>
-      <button
-        type="button"
-        class="tool-button"
-        title="将选择加入连续粘贴队列（Shift-Command-C）"
-        @click="emit('addStack')"
-      >
-        <span aria-hidden="true">≋</span>
-        队列
       </button>
       <button
         type="button"
