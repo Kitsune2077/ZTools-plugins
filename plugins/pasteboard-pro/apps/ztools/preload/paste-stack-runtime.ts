@@ -155,8 +155,8 @@ export class PasteStackRuntime {
   private prepared = new Map<string, PreparedStackItem>();
   private hookStarted = false;
   private generation = 0;
-  private suppressionDepth = 0;
-  private suppressedUntil = 0;
+  private stateVersion = 0;
+  private persistence = Promise.resolve();
 
   constructor(
     private readonly stackStore: ZToolsPasteStackStore,
@@ -165,7 +165,6 @@ export class PasteStackRuntime {
     private readonly nativeImage: NativeImageApi,
     private readonly hook: GlobalPasteHook | undefined,
     private readonly onChange: (state: PasteStackState) => void = () => undefined,
-    private readonly canConsume: () => boolean = () => true,
   ) {}
 
   async initialize(): Promise<void> {
@@ -189,6 +188,7 @@ export class PasteStackRuntime {
       direction: normalized.direction,
       itemIds: normalized.itemIds.filter((itemId) => this.prepared.has(itemId)),
     };
+    this.stateVersion += 1;
     this.syncHook();
     if (persist || this.state.itemIds.length !== normalized.itemIds.length) {
       this.state = await this.stackStore.put(this.state);
@@ -197,13 +197,24 @@ export class PasteStackRuntime {
     return structuredClone(this.state);
   }
 
-  beginDirectPaste(): void {
-    this.suppressionDepth += 1;
-  }
-
-  endDirectPaste(): void {
-    this.suppressionDepth = Math.max(0, this.suppressionDepth - 1);
-    this.suppressedUntil = Date.now() + 120;
+  async refreshFromStore(): Promise<PasteStackState> {
+    const baselineVersion = this.stateVersion;
+    while (true) {
+      const pending = this.persistence;
+      await pending;
+      if (pending === this.persistence) break;
+    }
+    if (baselineVersion !== this.stateVersion) return structuredClone(this.state);
+    const stored = await this.stackStore.get();
+    if (baselineVersion !== this.stateVersion) return structuredClone(this.state);
+    if (
+      stored.direction === this.state.direction &&
+      stored.itemIds.length === this.state.itemIds.length &&
+      stored.itemIds.every((itemId, index) => itemId === this.state.itemIds[index])
+    ) {
+      return structuredClone(this.state);
+    }
+    return this.replace(stored, false);
   }
 
   dispose(): void {
@@ -227,11 +238,6 @@ export class PasteStackRuntime {
   }
 
   private handlePasteRequest(): boolean {
-    if (
-      this.suppressionDepth > 0 ||
-      Date.now() < this.suppressedUntil ||
-      !this.canConsume()
-    ) return false;
     return this.consumeCurrent();
   }
 
@@ -244,12 +250,17 @@ export class PasteStackRuntime {
     if (itemId === undefined || item === undefined) return false;
     if (!writePreparedStackItem(item, this.clipboard, this.nativeImage)) return false;
 
+    this.generation += 1;
     this.state = reducePasteStack(this.state, { type: "consume" });
+    this.stateVersion += 1;
     this.prepared.delete(itemId);
     globalThis.setTimeout(() => this.syncHook(), 100);
     const snapshot = structuredClone(this.state);
     this.onChange(snapshot);
-    void this.stackStore.put(snapshot).catch(() => undefined);
+    const pending = this.persistence.then(async () => {
+      await this.stackStore.put(snapshot);
+    });
+    this.persistence = pending.catch(() => undefined);
     return true;
   }
 }

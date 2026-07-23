@@ -25,7 +25,11 @@ import PrivacySettingsPanel from "./components/PrivacySettings.vue";
 import Preview from "./components/Preview.vue";
 import SyncSettingsPanel from "./components/SyncSettings.vue";
 import TextEditor from "./components/TextEditor.vue";
-import { createPasteboardState, type PasteboardKeyboardEffect } from "./state";
+import {
+  createPasteboardState,
+  pasteStackSnapshot,
+  type PasteboardKeyboardEffect,
+} from "./state";
 
 const params = new URLSearchParams(window.location.search);
 const panel = params.get("panel");
@@ -73,7 +77,6 @@ const editor = ref<{
 }>();
 const editorSaving = ref(false);
 let shelfHasFocused = false;
-let stackPasteInProgress = false;
 let pasteStackPersistence = Promise.resolve();
 
 async function loadDevelopmentFixtures(): Promise<void> {
@@ -202,7 +205,7 @@ async function saveEditor(value: { title: string; text: string }): Promise<void>
 }
 
 function persistPasteStack(): Promise<void> {
-  const snapshot = structuredClone(state.pasteStack);
+  const snapshot = pasteStackSnapshot(state.pasteStack);
   const pending = pasteStackPersistence.then(async () => {
     const saved = await window.pasteboardPro?.savePasteStack(snapshot);
     if (saved !== undefined) state.setPasteStack(saved);
@@ -230,40 +233,9 @@ async function syncPasteStackToSelection(): Promise<void> {
   }
 }
 
-async function consumeStack(): Promise<void> {
-  const itemId =
-    state.pasteStack.direction === "forward"
-      ? state.pasteStack.itemIds[0]
-      : state.pasteStack.itemIds.at(-1);
-  if (itemId === undefined) return;
-  const item = visibleItems.value.find((candidate) => candidate.id === itemId);
-  if (item === undefined) {
-    await updatePasteStack({ type: "remove", itemId });
-    return;
-  }
-  const previous = structuredClone(state.pasteStack);
-  state.dispatchPasteStack({ type: "consume" });
-  stackPasteInProgress = true;
-  try {
-    await persistPasteStack();
-    const result = await window.pasteboardPro?.pasteStackItem(itemId);
-    status.value =
-      result?.status === "accessibility_required"
-        ? "已复制；授权辅助功能后可直接粘贴"
-        : `已粘贴队列项目：${item.title ?? item.kind}`;
-    window.close();
-  } catch (error) {
-    state.setPasteStack(previous);
-    await persistPasteStack().catch(() => undefined);
-    status.value = error instanceof Error ? error.message : "粘贴队列执行失败";
-  } finally {
-    stackPasteInProgress = false;
-  }
-}
-
 function onPasteStackChanged(event: Event): void {
   const detail = (event as CustomEvent<PasteStackState>).detail;
-  state.setPasteStack(detail);
+  state.setPasteStack(detail, true);
 }
 
 function handleEffect(effect: PasteboardKeyboardEffect | null): void {
@@ -306,11 +278,6 @@ function onKeydown(event: KeyboardEvent): void {
   if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === "c") {
     event.preventDefault();
     void copySelection();
-    return;
-  }
-  if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === "v" && state.pasteStack.itemIds.length > 0) {
-    event.preventDefault();
-    void consumeStack();
     return;
   }
   if (event.metaKey && !event.shiftKey && event.key.toLowerCase() === "t") {
@@ -552,7 +519,7 @@ function onWindowFocus(): void {
 }
 
 function onWindowBlur(): void {
-  if (isShelfMode && shelfHasFocused && !stackPasteInProgress) window.close();
+  if (isShelfMode && shelfHasFocused) window.close();
 }
 
 onMounted(async () => {

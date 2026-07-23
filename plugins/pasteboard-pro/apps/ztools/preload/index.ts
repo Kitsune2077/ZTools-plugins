@@ -125,7 +125,6 @@ type PasteboardProBridge = Readonly<{
   pasteHostItem(hostItemId: string): Promise<DirectPasteResult>;
   pasteContent(content: ClipboardWriteContent): Promise<DirectPasteResult>;
   pasteItem(itemId: string, plainText?: boolean): Promise<DirectPasteResult>;
-  pasteStackItem(itemId: string, plainText?: boolean): Promise<DirectPasteResult>;
   copyItem(itemId: string, plainText?: boolean): Promise<void>;
   createTextItem(text: string, title?: string): Promise<unknown>;
   updateTextItem(itemId: string, text: string, title?: string): Promise<unknown>;
@@ -201,6 +200,7 @@ let vaultSynchronization: Promise<SyncSettings> | undefined;
 let vaultSyncRequested = false;
 let shelfActivation = Promise.resolve();
 let shelfRefreshTimer: number | undefined;
+let pasteStackRefresh = Promise.resolve();
 let lastRetentionRun = 0;
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 const PANEL_REQUEST_CHANNEL = "pasteboard-pro:open-panel";
@@ -208,7 +208,7 @@ const SCREEN_PROTECTION_CHANNEL = "pasteboard-pro:set-screen-protection";
 const SHELF_EDGE_CHANNEL = "pasteboard-pro:set-shelf-edge";
 const HISTORY_CHANGED_CHANNEL = "pasteboard-pro:history-changed";
 const PASTE_STACK_CHANGED_CHANNEL = "pasteboard-pro:paste-stack-changed";
-const PASTE_STACK_DIRECT_PASTE_CHANNEL = "pasteboard-pro:paste-stack-direct-paste";
+const PASTE_STACK_REFRESH_INTERVAL_MS = 200;
 
 const pasteStackRuntime = isPrimaryWindow
   ? new PasteStackRuntime(
@@ -220,7 +220,6 @@ const pasteStackRuntime = isPrimaryWindow
         simulatePaste: () => ztools.simulateKeyboardTap?.("v", "meta"),
       }),
       (state) => shelfWindows.notifyPasteStackChanged(state),
-      () => !shelfWindows.isOpen(),
     )
   : undefined;
 
@@ -401,6 +400,14 @@ function scheduleHistoryMirror(): void {
     .catch(reportSynchronizationError);
 }
 
+function schedulePasteStackRefresh(): void {
+  pasteStackRefresh = pasteStackRefresh
+    .then(async () => {
+      await pasteStackRuntime?.refreshFromStore();
+    })
+    .catch(reportSynchronizationError);
+}
+
 if (isPrimaryWindow) {
   void ensureZToolsAutoStart(ipcRenderer).catch((error: unknown) => {
     console.warn("Paste剪切板自动启动登记失败", error);
@@ -428,12 +435,16 @@ if (isPrimaryWindow) {
       ?.replace(normalizePasteStackState(value), false)
       .catch(reportSynchronizationError);
   });
-  ipcRenderer.on(PASTE_STACK_DIRECT_PASTE_CHANNEL, (_event, phase) => {
-    if (phase === "begin") pasteStackRuntime?.beginDirectPaste();
-    else if (phase === "end") pasteStackRuntime?.endDirectPaste();
-  });
-
-  void pasteStackRuntime?.initialize().catch(reportSynchronizationError);
+  void pasteStackRuntime
+    ?.initialize()
+    .then(() => {
+      const timer = globalThis.setInterval(
+        schedulePasteStackRefresh,
+        PASTE_STACK_REFRESH_INTERVAL_MS,
+      );
+      (timer as unknown as { unref?: () => void }).unref?.();
+    })
+    .catch(reportSynchronizationError);
 
   ztools.onPluginEnter((parameter) => {
     ztools.hideMainWindow(false);
@@ -516,18 +527,6 @@ const bridge: PasteboardProBridge = {
       throw new RangeError("Clipboard item no longer exists");
     }
     return pasteCanonicalRecord(record, ztools.clipboard, plainText);
-  },
-  async pasteStackItem(itemId, plainText = false) {
-    ztools.sendToParent?.(PASTE_STACK_DIRECT_PASTE_CHANNEL, "begin");
-    try {
-      const record = await store.findRecordByItemId(itemId);
-      if (record === undefined) {
-        throw new RangeError("Clipboard item no longer exists");
-      }
-      return await pasteCanonicalRecord(record, ztools.clipboard, plainText);
-    } finally {
-      ztools.sendToParent?.(PASTE_STACK_DIRECT_PASTE_CHANNEL, "end");
-    }
   },
   async copyItem(itemId, plainText = false) {
     const record = await store.findRecordByItemId(itemId);

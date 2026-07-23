@@ -10,6 +10,7 @@ import { pasteboardTokens } from "@pasteboard-pro/design-tokens";
 import {
   createPasteboardState,
   keyboardAction,
+  pasteStackSnapshot,
   visualState,
 } from "../src/state";
 
@@ -42,6 +43,18 @@ describe("Vue canonical state", () => {
       expect(state.pasteStack.itemIds).toEqual(step.expectedItemIds);
       expect(state.pasteStack.direction).toBe(step.expectedDirection);
     }
+  });
+
+  it("copies a reactive-like paste stack into a plain persistence snapshot", () => {
+    const reactiveLike = new Proxy(
+      { direction: "forward" as const, itemIds: ["a", "b"] },
+      {},
+    );
+
+    expect(pasteStackSnapshot(reactiveLike)).toEqual({
+      direction: "forward",
+      itemIds: ["a", "b"],
+    });
   });
 
   it("filters through the shared query engine and repairs selection", () => {
@@ -162,6 +175,21 @@ describe("Vue canonical state", () => {
     state.toggleSelection(thirdId);
     state.toggleSelection(secondId);
     expect(state.selectionPasteQueue()).toEqual([firstId, thirdId, secondId]);
+  });
+
+  it("clears selection when the active paste queue is consumed", () => {
+    const state = createPasteboardState({
+      items: historyFixture,
+      selection: { selected: ["text-old", "url-middle"] },
+      pasteStack: {
+        direction: "forward",
+        itemIds: ["text-old", "url-middle"],
+      },
+    });
+
+    state.setPasteStack({ direction: "forward", itemIds: [] }, true);
+
+    expect(state.selection).toEqual({ selected: [] });
   });
 });
 

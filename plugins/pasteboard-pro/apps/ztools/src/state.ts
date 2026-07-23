@@ -112,6 +112,15 @@ function clonePasteStack(
       };
 }
 
+export function pasteStackSnapshot(
+  pasteStack: Readonly<PasteStackState>,
+): PasteStackState {
+  return {
+    direction: pasteStack.direction,
+    itemIds: [...pasteStack.itemIds],
+  };
+}
+
 export class PasteboardState {
   private items: PasteItem[];
   private readonly explicitOrder: ReadonlyMap<string, number> | undefined;
@@ -225,8 +234,19 @@ export class PasteboardState {
     this.pasteStack = reducePasteStack(this.pasteStack, action);
   }
 
-  setPasteStack(pasteStack: PasteStackState): void {
-    this.pasteStack = clonePasteStack(pasteStack);
+  setPasteStack(
+    pasteStack: PasteStackState,
+    clearSelectionWhenEmpty = false,
+  ): void {
+    const hadQueuedItems = this.pasteStack.itemIds.length > 0;
+    this.pasteStack = pasteStackSnapshot(pasteStack);
+    if (
+      clearSelectionWhenEmpty &&
+      hadQueuedItems &&
+      this.pasteStack.itemIds.length === 0
+    ) {
+      this.selection = { selected: [] };
+    }
   }
 
   selectionPasteQueue(): string[] {

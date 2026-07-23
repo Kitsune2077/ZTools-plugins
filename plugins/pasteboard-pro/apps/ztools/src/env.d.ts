@@ -24,7 +24,6 @@ declare global {
       pasteHostItem(hostItemId: string): Promise<DirectPasteResult>;
       pasteContent(content: ClipboardWriteContent): Promise<DirectPasteResult>;
       pasteItem(itemId: string, plainText?: boolean): Promise<DirectPasteResult>;
-      pasteStackItem(itemId: string, plainText?: boolean): Promise<DirectPasteResult>;
       copyItem(itemId: string, plainText?: boolean): Promise<void>;
       createTextItem(text: string, title?: string): Promise<unknown>;
       updateTextItem(itemId: string, text: string, title?: string): Promise<unknown>;
