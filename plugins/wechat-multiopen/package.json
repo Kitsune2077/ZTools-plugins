@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc && vite build"
+    "build": "vue-tsc && vite build && node scripts/fix-dist-plugin-json.cjs"
   },
   "dependencies": {
     "vue": "^3.5.13"
