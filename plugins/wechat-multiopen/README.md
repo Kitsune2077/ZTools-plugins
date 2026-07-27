@@ -8,6 +8,14 @@
 - `微信双开`：快速启动两个微信。
 - `微信多开`：进入单独页面，输入要启动的微信数量。
 
+## 截图
+
+![主界面](screenshots/main.png)
+
+![自定义数量](screenshots/custom-count.png)
+
+![搜索结果](screenshots/search.png)
+
 ## 开发
 
 ```bash
