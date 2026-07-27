@@ -31,7 +31,6 @@ function loadConfig() {
 function launch(targetCount: number) {
   isLaunching.value = true
   try {
-    window.services.log('ui launch clicked', { targetCount, wechatPath: wechatPath.value })
     const result: LaunchResult = window.services.launchWeChat(targetCount, wechatPath.value)
     wechatPath.value = result.wechatPath
     count.value = result.count
@@ -39,7 +38,6 @@ function launch(targetCount: number) {
     return true
   } catch (launchError) {
     const message = launchError instanceof Error ? launchError.message : String(launchError)
-    window.services.log('ui launch failed', { message })
     setMessage(message, true)
     window.services.notify(message)
     return false
@@ -55,7 +53,6 @@ function launchTwoAndExit() {
 }
 
 function openSettings() {
-  window.services.log('ui settings clicked')
   try {
     const selected = window.services.pickWeChatPath()
     if (!selected) return
@@ -73,7 +70,6 @@ function openSettings() {
 function askCountAndLaunch() {
   currentCode.value = 'custom-launch'
   setMessage('')
-  window.services.log('ui custom launch clicked')
 }
 
 function confirmCountAndLaunch() {

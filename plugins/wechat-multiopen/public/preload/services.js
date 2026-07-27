@@ -1,9 +1,8 @@
 const fs = require('node:fs')
 const path = require('node:path')
-const { spawn, spawnSync } = require('node:child_process')
+const { spawn } = require('node:child_process')
 
 const DB_KEY = 'wechat-multiopen-config'
-const LOG_FILE = path.join(__dirname, '..', 'wechat-multiopen.log')
 
 const DEFAULT_WECHAT_PATHS = [
   'C:\\Program Files\\Tencent\\Weixin\\Weixin.exe',
@@ -11,26 +10,6 @@ const DEFAULT_WECHAT_PATHS = [
   'C:\\Program Files (x86)\\Tencent\\Weixin\\Weixin.exe',
   'C:\\Program Files (x86)\\Tencent\\WeChat\\WeChat.exe'
 ]
-
-function log(message, data) {
-  const line = JSON.stringify({
-    time: new Date().toISOString(),
-    message,
-    data: data || null
-  })
-
-  try {
-    fs.appendFileSync(LOG_FILE, line + '\n', 'utf8')
-  } catch (_error) {
-    // Logging must not break the plugin.
-  }
-
-  try {
-    console.log('[wechat-multiopen]', message, data || '')
-  } catch (_error) {
-    // Console logging is best-effort.
-  }
-}
 
 function isFile(filePath) {
   try {
@@ -68,8 +47,8 @@ function findWeChatInDirectory(dirPath) {
         .find(isFile)
       if (childMatch) return childMatch
     }
-  } catch (error) {
-    log('findWeChatInDirectory failed', { dirPath, error: String(error) })
+  } catch (_error) {
+    return ''
   }
 
   return ''
@@ -93,8 +72,7 @@ function readConfig() {
     const config = window.ztools.dbStorage.getItem(DB_KEY)
     if (!config || typeof config !== 'object') return {}
     return config
-  } catch (error) {
-    log('readConfig failed', { error: String(error) })
+  } catch (_error) {
     return {}
   }
 }
@@ -102,7 +80,7 @@ function readConfig() {
 function saveConfig(config) {
   const wechatPath = resolveWeChatPath(config.wechatPath)
   if (config.wechatPath && !wechatPath) {
-    throw new Error('请选择 Weixin.exe。')
+    throw new Error('请选择 Weixin.exe 或 WeChat.exe。')
   }
 
   const nextConfig = {
@@ -110,7 +88,6 @@ function saveConfig(config) {
     count: normalizeCount(config.count)
   }
   window.ztools.dbStorage.setItem(DB_KEY, nextConfig)
-  log('saveConfig', nextConfig)
   return nextConfig
 }
 
@@ -119,22 +96,6 @@ function findWeChatPath() {
   const savedPath = resolveWeChatPath(config.wechatPath)
   if (savedPath) return savedPath
   return DEFAULT_WECHAT_PATHS.find(isFile) || ''
-}
-
-function getWeChatProcessCount() {
-  const names = ['Weixin.exe', 'WeChat.exe']
-  let count = 0
-
-  for (const name of names) {
-    const result = spawnSync('tasklist.exe', ['/FI', `IMAGENAME eq ${name}`, '/FO', 'CSV', '/NH'], {
-      windowsHide: true,
-      encoding: 'utf8'
-    })
-
-    count += (result.stdout.match(new RegExp(`"${name.replace('.', '\\.')}"`, 'gi')) || []).length
-  }
-
-  return count
 }
 
 function spawnWeChat(wechatPath) {
@@ -149,8 +110,6 @@ function spawnWeChat(wechatPath) {
 }
 
 function launchWeChat(count, customPath) {
-  log('launch requested', { count, customPath })
-
   if (process.platform !== 'win32') {
     throw new Error('微信多开目前只支持 Windows。')
   }
@@ -159,23 +118,13 @@ function launchWeChat(count, customPath) {
   const wechatPath = resolveWeChatPath(customPath) || findWeChatPath()
 
   if (!isFile(wechatPath)) {
-    const error = '没有找到微信主程序，请在设置里选择 Weixin.exe 或微信安装目录。'
-    log('launch failed: missing executable', { customPath, resolvedPath: wechatPath })
+    const error = '没有找到微信主程序，请在设置里选择 Weixin.exe 或 WeChat.exe。'
     throw new Error(error)
   }
 
-  const pids = []
-
-  try {
-    for (let index = 0; index < launchCount; index += 1) {
-      pids.push(spawnWeChat(wechatPath))
-    }
-  } catch (error) {
-    log('direct spawn failed', { error: String(error), wechatPath })
-    throw error
+  for (let index = 0; index < launchCount; index += 1) {
+    spawnWeChat(wechatPath)
   }
-
-  log('launch dispatched', { wechatPath, launchCount, pids })
 
   saveConfig({ wechatPath, count: launchCount })
   return { wechatPath, count: launchCount }
@@ -183,7 +132,7 @@ function launchWeChat(count, customPath) {
 
 function pickWeChatPath() {
   const files = window.ztools.showOpenDialog({
-    title: '选择 Weixin.exe',
+    title: '选择 Weixin.exe / WeChat.exe',
     properties: ['openFile'],
     filters: [{ name: 'Weixin.exe / WeChat.exe', extensions: ['exe'] }]
   })
@@ -191,10 +140,9 @@ function pickWeChatPath() {
   const selectedPath = Array.isArray(files) ? files[0] || '' : ''
   const selectedName = path.basename(selectedPath).toLowerCase()
   const resolvedPath = ['weixin.exe', 'wechat.exe'].includes(selectedName) ? selectedPath : ''
-  log('pickWeChatPath', { selectedPath, resolvedPath })
 
   if (selectedPath && !resolvedPath) {
-    throw new Error('请选择微信主程序 Weixin.exe。')
+    throw new Error('请选择微信主程序 Weixin.exe 或 WeChat.exe。')
   }
 
   return resolvedPath
@@ -203,22 +151,16 @@ function pickWeChatPath() {
 function notify(message) {
   try {
     window.ztools.showNotification(message)
-  } catch (error) {
-    log('notify failed', { message, error: String(error) })
+  } catch (_error) {
+    // Notification errors are non-critical.
   }
 }
 
 window.services = {
-  defaultPaths: DEFAULT_WECHAT_PATHS,
   findWeChatPath,
-  getLogFilePath: () => LOG_FILE,
-  getWeChatProcessCount,
-  isFile,
   launchWeChat,
-  log,
   notify,
   pickWeChatPath,
   readConfig,
-  resolveWeChatPath,
   saveConfig
 }

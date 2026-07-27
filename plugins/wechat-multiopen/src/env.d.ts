@@ -18,17 +18,11 @@ interface WeChatLaunchResult {
 }
 
 interface Services {
-  defaultPaths: string[]
   findWeChatPath: () => string
-  getLogFilePath: () => string
-  getWeChatProcessCount: () => number
-  isFile: (filePath: string) => boolean
   launchWeChat: (count: number, customPath?: string) => WeChatLaunchResult
-  log: (message: string, data?: unknown) => void
   notify: (message: string) => void
   pickWeChatPath: () => string
   readConfig: () => WeChatMultiOpenConfig
-  resolveWeChatPath: (inputPath?: string) => string
   saveConfig: (config: WeChatMultiOpenConfig) => WeChatMultiOpenConfig
 }
 
