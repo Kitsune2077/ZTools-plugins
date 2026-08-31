@@ -17,19 +17,19 @@
       "code": "ui.capture",
       "explain": "进入截图标注",
       "icon": "./logo.png",
-      "cmds": [{ "type": "window", "label": "截图标注" }, { "type": "window", "label": "Z截图" }]
+      "cmds": ["截图标注", "截图", "截屏"]
     },
     {
       "code": "function.capture-copy",
       "explain": "截图标注并复制到剪贴板",
       "icon": "./logo.png",
-      "cmds": [{ "type": "window", "label": "截图标注并复制" }]
+      "cmds": ["截图标注并复制"]
     },
     {
       "code": "function.capture-pin",
       "explain": "截图直接钉到桌面",
       "icon": "./logo.png",
-      "cmds": [{ "type": "window", "label": "截图并钉图" }, { "type": "window", "label": "钉图" }]
+      "cmds": ["截图并钉图", "钉图"]
     }
   ]
 }
