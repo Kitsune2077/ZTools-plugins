@@ -26,23 +26,6 @@ declare global {
       height?: number
     }): unknown
     copyImageDataURL(dataURL: string): boolean
-    getSettings(): Promise<{
-      color: string
-      lineWidth: number
-      format: 'png' | 'jpg'
-      dir: string | null
-    }>
-    setSettings(s: {
-      color?: string
-      lineWidth?: number
-      format?: 'png' | 'jpg'
-      dir?: string | null
-    }): Promise<{
-      color: string
-      lineWidth: number
-      format: 'png' | 'jpg'
-      dir: string | null
-    }>
     saveImageDataURL(
       dataURL: string,
       opts?: { format?: 'png' | 'jpg' }

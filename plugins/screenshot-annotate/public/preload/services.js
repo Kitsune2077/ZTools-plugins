@@ -45,6 +45,9 @@ function resolvePngSize(buffer) {
 // 因此 dataURL 写到临时文件，URL 只传短文件路径，子窗口读回 dataURL。
 const TEMP_DIR = path.join(window.ztools.getPath('temp'), 'screenshot-annotate')
 
+// 固定默认保存格式（无可视化设置界面，默认 png）
+const DEFAULT_FORMAT = 'png'
+
 /** 写 dataURL 到临时文件，返回短文件路径（供 URL query 传递） */
 function writeTempImage(dataURL) {
   const { buffer } = dataURLToBuffer(dataURL)
@@ -64,51 +67,6 @@ function readTempImage(filePath) {
     /* 删除失败不影响使用 */
   }
   return `data:image/png;base64,${buf.toString('base64')}`
-}
-
-// ── 设置持久化（dbStorage）────────────────────────────────
-// 统一前缀，避免与其他插件冲突；dbGet/dbPut 按同步处理，异常兜底默认值。
-const SET_PREFIX = 'screenshot-annotate.'
-
-/** 读单键，缺省或失败返回默认值（兼容同步返回与 Promise 返回） */
-async function readSetting(key, def) {
-  try {
-    const v = window.ztools.dbGet(SET_PREFIX + key)
-    const r = await Promise.resolve(v)
-    return r === undefined || r === null ? def : r
-  } catch {
-    return def
-  }
-}
-/** 写单键（仅写入非空值；dbPut 可能同步也可能异步，统一不用返回值） */
-function writeSetting(key, value) {
-  if (value === undefined || value === null) return
-  try {
-    window.ztools.dbPut(SET_PREFIX + key, value)
-  } catch {
-    /* db 不可用时静默 */
-  }
-}
-
-const SETTINGS_DEFAULTS = { color: '#e5484d', lineWidth: 3, format: 'png', dir: null }
-
-/** 读全部设置（合并默认值） */
-async function getSettings() {
-  const [color, lineWidth, format, dir] = await Promise.all([
-    readSetting('color', SETTINGS_DEFAULTS.color),
-    readSetting('lineWidth', SETTINGS_DEFAULTS.lineWidth),
-    readSetting('format', SETTINGS_DEFAULTS.format),
-    readSetting('dir', SETTINGS_DEFAULTS.dir)
-  ])
-  return { color, lineWidth, format, dir }
-}
-/** 写全部设置（部分字段可省略，省略的不覆盖） */
-function setSettings(s = {}) {
-  if (s.color !== undefined) writeSetting('color', s.color)
-  if (s.lineWidth !== undefined) writeSetting('lineWidth', s.lineWidth)
-  if (s.format !== undefined) writeSetting('format', s.format)
-  if (s.dir !== undefined) writeSetting('dir', s.dir)
-  return getSettings()
 }
 
 /** 给 Promise 加超时，超时后 reject，避免永久挂起 */
@@ -232,13 +190,7 @@ function copyImageDataURL(dataURL) {
  */
 function saveImageDataURL(dataURL, options = {}) {
   const { buffer } = dataURLToBuffer(dataURL)
-  let format = options.format
-  try {
-    if (!format) format = window.ztools.dbGet(SET_PREFIX + 'format') || SETTINGS_DEFAULTS.format
-  } catch {
-    /* 读设置失败回退默认 */
-  }
-  if (!format) format = SETTINGS_DEFAULTS.format
+  const format = options.format || DEFAULT_FORMAT
   const ext = format === 'jpg' ? 'jpg' : 'png'
   const d = new Date()
   const pad = (n) => String(n).padStart(2, '0')
@@ -265,8 +217,6 @@ const services = {
   getVirtualBounds,
   copyImageDataURL,
   saveImageDataURL,
-  getSettings,
-  setSettings,
   writeTempImage,
   readTempImage,
   openPinWindow,
@@ -489,3 +439,58 @@ ipcRenderer.on(EDITOR_MOVE_CHANNEL, (_event, payload) => {
     /* 忽略 */
   }
 })
+
+// ── 无页面命令协议（window.exports + mode:none）───────────
+// 触发任一 feature 时 ZTools 不渲染 main 页面，直接进入这里截图。
+// 参考市场插件 shortcut-capture 的同款协议。
+function startCapture(mode) {
+  const anyZtools = window.ztools
+  // 框选前先隐藏搜索主窗口：否则主窗口停留在屏幕上，被拍进截图画面里
+  anyZtools.hideMainWindow(true)
+  anyZtools.screenCapture((image, bounds) => {
+    if (!image) {
+      // 用户取消了框选，恢复主窗口让交互不中断
+      anyZtools.showMainWindow()
+      return
+    }
+    const b = bounds ?? { x: 80, y: 80, width: 0, height: 0 }
+    if (mode === 'pin') {
+      openPinWindow({
+        dataURL: image,
+        x: b.x ?? undefined,
+        y: b.y ?? undefined,
+        width: b.width || undefined,
+        height: b.height || undefined
+      })
+    } else {
+      openCaptureWindow({
+        dataURL: image,
+        x: b.x,
+        y: b.y,
+        width: b.width || undefined,
+        height: b.height || undefined
+      })
+    }
+  })
+}
+
+window.exports = {
+  'ui.capture': {
+    mode: 'none',
+    args: {
+      enter: () => startCapture('edit')
+    }
+  },
+  'function.capture-copy': {
+    mode: 'none',
+    args: {
+      enter: () => startCapture('edit')
+    }
+  },
+  'function.capture-pin': {
+    mode: 'none',
+    args: {
+      enter: () => startCapture('pin')
+    }
+  }
+}

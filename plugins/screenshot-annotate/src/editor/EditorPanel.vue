@@ -93,8 +93,10 @@ const mosaicSizes = [10, 14, 20, 28, 40]
 const mosaicCell = ref(14)
 const canUndo = ref(false)
 const canRedo = ref(false)
-/** 持久化默认值（stage5 读取覆盖初值） */
-let settings: { color: string; lineWidth: number; format: 'png' | 'jpg'; dir: string | null } | null = null
+
+// 固定默认值（无可视化设置界面）
+const DEFAULT_COLOR = '#e5484d'
+const DEFAULT_LINE_WIDTH = 3
 
 // 文字输入浮层
 const textInputRef = ref<HTMLTextAreaElement>()
@@ -443,13 +445,13 @@ function onGlobalKey(e: KeyboardEvent) {
   }
 }
 
-/** 应用持久化默认颜色/线宽（若已实例化 ctrl 立即同步） */
+/** 应用固定默认颜色/线宽（若已实例化 ctrl 立即同步） */
 function applySettings() {
-  if (!settings || !ctrl) return
-  color.value = settings.color
-  lineWidth.value = settings.lineWidth
-  ctrl.setColor(settings.color)
-  ctrl.setLineWidth(settings.lineWidth)
+  if (!ctrl) return
+  color.value = DEFAULT_COLOR
+  lineWidth.value = DEFAULT_LINE_WIDTH
+  ctrl.setColor(DEFAULT_COLOR)
+  ctrl.setLineWidth(DEFAULT_LINE_WIDTH)
 }
 
 onMounted(() => {
@@ -465,10 +467,6 @@ onMounted(() => {
     recomputeFit()
   }
   img.src = props.dataUrl
-  void window.services.getSettings().then((s) => {
-    settings = s
-    applySettings()
-  })
   recomputeFit()
   // 窗口尺寸变化时重算铺满基础缩放；首次给一次延迟确保布局就绪
   const stage = stageRef.value
