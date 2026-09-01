@@ -779,6 +779,15 @@ onMounted(async () => {
   await configStore.load()
   await bookStore.load()
     ; (window as any).ztools?.onPluginEnter?.((action: any) => {
+      if (action?.code === 'hushreader-close') {
+        saveReadingProgress()
+        hushreaderActivated.value = false
+        stopReadingTimer()
+        hushreaderWindow?.close?.()
+        hushreaderWindow = null
+        try { (window as any).ztools?.outPlugin?.() } catch { }
+        return
+      }
       route.value = action.code
       enterAction.value = action
     })
