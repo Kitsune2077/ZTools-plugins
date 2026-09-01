@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.1](https://github.com/me1dlinger/hushreader/releases/tag/v1.4.1) - 2026-09-01
+
+### Added
+- **关闭隐阅窗口指令**：新增 `hushreader-close` 指令，支持通过 ZTools 平台快捷键绑定直接关闭隐阅窗口，无需鼠标移动到窗口上即可触发（需升级 ZTools 至最新版以支持 `mainHide` 特性）
+
 ## [1.4.0](https://github.com/me1dlinger/hushreader/releases/tag/v1.4.0) - 2026-06-23
 
 ### Added
