@@ -116,12 +116,16 @@ async function captureDisplays() {
   })
 }
 
-/** 打开标注编辑窗口（承载 EditorPanel）。dataURL 经临时文件传给渲染层（query 只放短路径）。 */
+/** 打开标注编辑窗口（承载 EditorPanel）。dataURL 经临时文件传给渲染层（query 只放短路径）。
+ *  仿 shortcut-capture：transparent 窗口 + backgroundColor 全透明，图片居中展示，
+ *  工具条作为独立毛玻璃条悬浮在图片下方透明区，与图片分离（"图片外单独一个窗口"的菜单栏）。 */
 function openCaptureWindow({ dataURL, x, y, width, height }) {
   const winId = `edit${++editorSeq}`
   const sz = resolvePngSize(dataURLToBuffer(dataURL).buffer)
+  // 图片下方透明留白：容纳独立悬浮工具条的高度（条高 50 + 上下间距 12）
+  const TOOLBAR_PAD = 78
   const w = width || sz?.w || 960
-  const h = height || sz?.h || 640
+  const h = (height || sz?.h || 640) + TOOLBAR_PAD
   const px = x ?? 80
   const py = y ?? 80
   const imgPath = writeTempImage(dataURL)
@@ -133,7 +137,8 @@ function openCaptureWindow({ dataURL, x, y, width, height }) {
       y: py,
       width: w,
       height: h,
-      transparent: false,
+      transparent: true,
+      backgroundColor: '#00000000',
       frame: false,
       title: '截图标注',
       alwaysOnTop: true,
@@ -267,9 +272,10 @@ function posOf(winId, getter) {
  */
 function openPinWindow({ dataURL, x, y, width, height }) {
   const winId = `pin${++pinSeq}`
-  // 默认按图原始尺寸；图片 dataURL 无法在 preload 取宽高，PinApp 会自适。窗口先给个合理默认。
-  const w = width || Math.min(480 * 2, 1200)
-  const h = height || Math.min(320 * 2, 900)
+  // 窗口贴合图片真实尺寸（解析 PNG 宽高），四周不再露出深色/黑衬底
+  const sz = resolvePngSize(dataURLToBuffer(dataURL).buffer)
+  const w = width || sz?.w || 1200
+  const h = height || sz?.h || 900
   const px = x ?? 80
   const py = y ?? 80
   const imgPath = writeTempImage(dataURL)
@@ -284,12 +290,12 @@ function openPinWindow({ dataURL, x, y, width, height }) {
       width: w,
       height: h,
       frame: false,
-      transparent: false,
-      backgroundColor: '#1c1c20',
+      transparent: true,
+      backgroundColor: '#00000000',
       alwaysOnTop: true,
       skipTaskbar: true,
       resizable: true,
-      hasShadow: true,
+      hasShadow: false,
       fullscreenable: false,
       webPreferences: {
         nodeIntegration: true,
@@ -443,22 +449,37 @@ ipcRenderer.on(EDITOR_MOVE_CHANNEL, (_event, payload) => {
 // ── 无页面命令协议（window.exports + mode:none）───────────
 // 触发任一 feature 时 ZTools 不渲染 main 页面，直接进入这里截图。
 // 参考市场插件 shortcut-capture 的同款协议。
+// 结束本次运行：打开子窗口/取消后调用 outPlugin()（不杀进程）把插件收回后台，
+// 否则插件保持"前台隐藏运行"态，第二次快捷键无法重新触发（截图/钉图"只能用一次"的根因）。
+// 已创建的编辑器/钉图子窗口与 preload 的 IPC 中转（sendToParent 通道）不随 outPlugin() 销毁，
+// 子窗口可继续交互并随时中转钉图/移窗 —— 参照 clipboard-image-paintbrush 的 outPlugin() 用法。
+function endRun() {
+  setTimeout(() => {
+    try {
+      window.ztools.outPlugin()
+    } catch {
+      /* 退出失败不影响子窗口 */
+    }
+  }, 50)
+}
+
 function startCapture(mode) {
   const anyZtools = window.ztools
   // 框选前先隐藏搜索主窗口：否则主窗口停留在屏幕上，被拍进截图画面里
   anyZtools.hideMainWindow(true)
-  anyZtools.screenCapture((image, bounds) => {
+  anyZtools.screenCapture((image) => {
     if (!image) {
       // 用户取消了框选，恢复主窗口让交互不中断
       anyZtools.showMainWindow()
+      endRun()
       return
     }
-    const b = bounds ?? { x: 80, y: 80, width: 0, height: 0 }
+    const b = { x: 80, y: 80, width: 0, height: 0 }
     if (mode === 'pin') {
       openPinWindow({
         dataURL: image,
-        x: b.x ?? undefined,
-        y: b.y ?? undefined,
+        x: b.x,
+        y: b.y,
         width: b.width || undefined,
         height: b.height || undefined
       })
@@ -471,6 +492,7 @@ function startCapture(mode) {
         height: b.height || undefined
       })
     }
+    endRun()
   })
 }
 

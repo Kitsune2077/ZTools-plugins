@@ -15,6 +15,7 @@ export type ToolKind =
   | 'highlight'
   | 'text'
   | 'mosaic'
+  | 'serial'
 
 export interface Style {
   color: string
@@ -79,11 +80,24 @@ export interface TextAnno extends BaseAnno {
 }
 export interface MosaicAnno extends BaseAnno {
   type: 'mosaic'
-  rect: { x: number; y: number; w: number; h: number }
+  /** 涂抹轨迹（逐点打码） */
+  points: Point[]
   /** 每格边长（越大马赛克越粗） */
   cell: number
-  /** 颗粒形状：rect=方格，round=球状圆点 */
+  /** 颗粒形状：rect=方块，round=球状圆点 */
   shape: 'rect' | 'round'
+}
+export interface SerialAnno extends BaseAnno {
+  type: 'serial'
+  /** 圆心（图片像素） */
+  pos: Point
+  /** 序号数字 */
+  number: number
+  /** 可选说明文字 */
+  text: string
+  /** 圆半径（图片像素） */
+  radius: number
+  textStyle: TextStyle
 }
 
 export type Annotation =
@@ -95,6 +109,7 @@ export type Annotation =
   | HighlightAnno
   | TextAnno
   | MosaicAnno
+  | SerialAnno
 
 let idCounter = 1
 export function genId(): string {
@@ -205,26 +220,45 @@ export function drawAnnotation(
       })
       break
     }
+    case 'serial': {
+      const r = anno.radius
+      // 圆点序号
+      ctx.beginPath()
+      ctx.arc(anno.pos.x, anno.pos.y, r, 0, Math.PI * 2)
+      ctx.fillStyle = anno.textStyle.color
+      ctx.fill()
+      // 白字居中
+      ctx.fillStyle = '#ffffff'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.font = `700 ${Math.max(10, r)}px sans-serif`
+      ctx.fillText(String(anno.number), anno.pos.x, anno.pos.y + 1)
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'alphabetic'
+      // 说明文字排右侧
+      if (anno.text) {
+        ctx.fillStyle = anno.textStyle.color
+        ctx.font = `${anno.textStyle.size}px sans-serif`
+        ctx.fillText(anno.text, anno.pos.x + r + 8, anno.pos.y + r / 2)
+      }
+      break
+    }
     case 'mosaic': {
-      if (!source) break
+      if (!source || !anno.points.length) break
       const cell = anno.cell
-      const r = anno.rect
-      for (let gy = 0; gy < r.h; gy += cell) {
-        for (let gx = 0; gx < r.w; gx += cell) {
-          const sx = r.x + gx + cell / 2
-          const sy = r.y + gy + cell / 2
-          if (anno.shape === 'round') {
-            // 球状：以当前像素颜色填充圆点，避免采样丢失细节
-            const sample = ctx.getImageData(r.x + gx, r.y + gy, 1, 1).data
-            ctx.beginPath()
-            ctx.arc(r.x + gx + cell / 2, r.y + gy + cell / 2, cell / 2, 0, Math.PI * 2)
-            ctx.fillStyle = `rgb(${sample[0]},${sample[1]},${sample[2]})`
-            ctx.globalAlpha = 0.9
-            ctx.fill()
-            ctx.globalAlpha = 1
-          } else {
-            ctx.drawImage(source, sx, sy, 1, 1, r.x + gx, r.y + gy, cell, cell)
-          }
+      // 涂抹式打码：沿轨迹在每个点处盖一个 cell 大小的颗粒。
+      // 圆/方都从**未变色的原图 source** 采样 1px 放大成 cell 颗粒：
+      // 若从当前画布采样（旧实现 getImageData），已打码区域会让颜色随区域漂移"乱变色"。
+      for (const p of anno.points) {
+        if (anno.shape === 'round') {
+          ctx.save()
+          ctx.beginPath()
+          ctx.arc(p.x, p.y, cell / 2, 0, Math.PI * 2)
+          ctx.clip()
+          ctx.drawImage(source, p.x, p.y, 1, 1, p.x - cell / 2, p.y - cell / 2, cell, cell)
+          ctx.restore()
+        } else {
+          ctx.drawImage(source, p.x, p.y, 1, 1, p.x - cell / 2, p.y - cell / 2, cell, cell)
         }
       }
       break
@@ -239,17 +273,26 @@ export class History {
   private undoStack: Annotation[][] = []
   private redoStack: Annotation[][] = []
 
-  constructor(private onChange?: () => void) {}
+  constructor(private onChange?: () => void) {
+    // 初始空快照作基准：使「新增第一个标注后立即撤销」也能把首个标注撤掉——
+    // 若栈首直接是「当前状态」，第一次 undo 弹出等价的当前快照，看起来像"撤不掉"。
+    // 基准不算可撤销操作，故 canUndo 以长度 > 1 判断。
+    this.undoStack.push([])
+  }
 
   get canUndo(): boolean {
-    return this.undoStack.length > 0
+    return this.undoStack.length > 1
   }
   get canRedo(): boolean {
     return this.redoStack.length > 0
   }
 
   push(list: Annotation[]): void {
-    this.undoStack.push(clone(list))
+    const snap = clone(list)
+    // 去重：若与栈顶快照完全相同（无实际改动），不重复入栈，避免"撤一步没变化"的错觉
+    const top = this.undoStack[this.undoStack.length - 1]
+    if (top && sameList(top, snap)) return
+    this.undoStack.push(snap)
     this.redoStack.length = 0
     this.onChange?.()
   }
@@ -279,4 +322,10 @@ export class History {
 
 function clone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T
+}
+
+/** 两个标注列表是否完全一致（用于历史去重） */
+function sameList(a: Annotation[], b: Annotation[]): boolean {
+  if (a.length !== b.length) return false
+  return JSON.stringify(a) === JSON.stringify(b)
 }

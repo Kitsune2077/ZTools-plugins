@@ -7,7 +7,7 @@
  *   - 区间工具(rect/ellipse/line/arrow/highlight/mosaic)：按下定起点、拖动实时预览、松开成形。
  *   - 文字(text)：点击定位 → 弹输入框（commitText 落地）。
  */
-import { Annotation, TextAnno, ToolKind, drawAnnotation, History, genId, Point } from './annotations'
+import { Annotation, TextAnno, SerialAnno, ToolKind, drawAnnotation, History, genId, Point } from './annotations'
 
 export interface ToolSettings {
   style: { color: string; lineWidth: number; fill?: boolean }
@@ -20,8 +20,8 @@ const DEFAULT_TOOL: ToolKind = 'select'
 const DEFAULT_STYLE = { color: '#e5484d', lineWidth: 3 }
 const DEFAULT_TEXT_STYLE = { color: '#e5484d', size: 28, bold: false }
 
-/** 区间型（按下拖动实时预览）工具的集合 */
-const SHAPE_TOOLS: ToolKind[] = ['rect', 'ellipse', 'line', 'arrow', 'highlight', 'mosaic']
+/** 区间型（按下拖动实时预览）工具的集合。马赛克为自由涂抹工具，不在其列。 */
+const SHAPE_TOOLS: ToolKind[] = ['rect', 'ellipse', 'line', 'arrow', 'highlight']
 
 /** 正在绘制的草稿：a=起点，b=随指针更新的终点；pen 存画笔轨迹 */
 interface Draft {
@@ -47,7 +47,7 @@ export class EditorController {
     mosaicShape: 'rect'
   }
 
-  /** 文字输入请求：Vue 弹出输入框定位到该点，完成后调用 commitText */
+  /** 就原框就地编辑请求：Vue 在文字原包围盒位置渲染透明编辑层，输入完调 commitText */
   onTextRequest: ((rect: { x: number; y: number; w: number; h: number }) => void) | null = null
   /** 选中目标变化/文字字号缩放后被调用，用于 Vue 回显工具栏样式 */
   onSelectionChange: (() => void) | null = null
@@ -59,6 +59,10 @@ export class EditorController {
   private selectedId: string | null = null
   /** 正在重新编辑的既有文字标注 id（区别于新建 pendingTextPos） */
   private editingTextId: string | null = null
+  /** 正在输入说明文字的序号标注 id（serial 的说明文字） */
+  private editingSerialId: string | null = null
+  /** 序号标注数字递增器 */
+  private serialCounter = 1
   /** 拖动选中标注时是否已记录拖前状态（首次 move 才 push，避免单击命中误记撤销） */
   private draggedOnce = false
   /** 缩放手柄：当前命中的手柄 index 与拖动起始几何快照（-1=未在缩放） */
@@ -150,7 +154,12 @@ export class EditorController {
       this.onTextRequest?.({ x, y, w: 0, h: 0 })
       return
     }
-    if (t === 'pen') {
+    if (t === 'serial') {
+      this.createSerial({ x, y })
+      return
+    }
+    // pen / mosaic：按自由轨迹绘制（mosaic 即涂抹打码）
+    if (t === 'pen' || t === 'mosaic') {
       this.draft = { tool: t, a: { x, y }, b: { x, y }, pen: [{ x, y }] }
     } else if (SHAPE_TOOLS.includes(t)) {
       this.draft = { tool: t, a: { x, y }, b: { x, y } }
@@ -166,6 +175,18 @@ export class EditorController {
       const p = d.pen!
       const last = p[p.length - 1]
       if (Math.abs(last.x - x) + Math.abs(last.y - y) >= 1) p.push({ x, y })
+    } else if (d.tool === 'mosaic') {
+      // 涂抹：以格径一半为步长在轨迹上插值补点，保证拖动连续无缝隙
+      const p = d.pen!
+      const last = p[p.length - 1]
+      const dx = x - last.x
+      const dy = y - last.y
+      const dist = Math.hypot(dx, dy)
+      const step = Math.max(2, Math.round(this.settings.mosaicCell / 2))
+      if (dist >= step) {
+        const n = Math.ceil(dist / step)
+        for (let i = 1; i <= n; i++) p.push({ x: last.x + (dx * i) / n, y: last.y + (dy * i) / n })
+      }
     }
     d.b = { x, y }
     this.render()
@@ -178,6 +199,8 @@ export class EditorController {
     this.draft = null
     if (d.tool === 'pen') {
       this.finishPen(d.pen ?? [{ ...d.a }])
+    } else if (d.tool === 'mosaic') {
+      this.finishMosaic(d.pen ?? [{ ...d.a }])
     } else {
       this.completeShape(d.tool, d.a, d.b)
     }
@@ -216,32 +239,52 @@ export class EditorController {
     this.onSelectionChange?.()
   }
 
-  /** 若选中的是文字，重新弹出输入框编辑其内容 */
+  /** 若选中的是文字/序号说明，触发就原框就地编辑（交出精确包围盒与回填文字，Vue 在其原位置渲染编辑层） */
   startEditSelectedText(): void {
     const sel = this.selected
-    if (!sel || sel.type !== 'text') return
-    this.editingTextId = sel.id
-    this.onTextRequest?.({ x: sel.pos.x, y: sel.pos.y - sel.textStyle.size * 0.2, w: sel.textStyle.size, h: sel.textStyle.size })
+    if (!sel || (sel.type !== 'text' && sel.type !== 'serial')) return
+    if (sel.type === 'text') {
+      this.editingTextId = sel.id
+      const tb = this.textBounds(sel)
+      this.onTextRequest?.({
+        x: tb.x,
+        y: tb.y,
+        w: Math.max(tb.w, sel.textStyle.size),
+        h: Math.max(tb.h, sel.textStyle.size)
+      })
+      this.render()
+      return
+    }
+    this.editingSerialId = sel.id
+    const sb = this.serialBounds(sel)
+    this.onTextRequest?.({ x: sb.x, y: sb.y, w: sb.w, h: sb.h })
+    this.render()
   }
 
-  /** 把文字样式(字号/粗体/颜色)部分应用到选中的文字。返回是否实际改动。 */
+  /** 把文字样式(字号/粗体/颜色)部分应用到选中的文字/序号。返回是否实际改动。 */
   applyStyleToSelected(partial: Partial<{ size: number; bold: boolean; color: string }>): boolean {
     const sel = this.selected
-    if (!sel || sel.type !== 'text') return false
+    if (!sel || (sel.type !== 'text' && sel.type !== 'serial')) return false
     const next = { ...sel.textStyle, ...partial }
     if (next.size === sel.textStyle.size && next.bold === sel.textStyle.bold && next.color === sel.textStyle.color) return false
     this.history.push(this.list)
-    this.list = this.list.map((a) =>
-      a.id === sel.id && a.type === 'text' ? { ...a, textStyle: next } : a,
-    )
+    this.list = this.list.map((a) => {
+      if (a.id !== sel.id) return a
+      if (a.type === 'serial' && next.size !== a.textStyle.size) {
+        const k = next.size / Math.max(a.textStyle.size, 1)
+        return { ...a, textStyle: next, radius: Math.max(6, Math.round(a.radius * k)) } as Annotation
+      }
+      if (a.type === 'text' || a.type === 'serial') return { ...a, textStyle: next } as Annotation
+      return a
+    })
     this.render()
     return true
   }
 
-  /** 当前选中文字的样式，供工具栏回显；非文字返回 null。 */
+  /** 当前选中文字/序号的样式，供工具栏回显；非文字返回 null。 */
   getSelectedTextStyle(): { size: number; bold: boolean; color: string } | null {
     const sel = this.selected
-    return sel && sel.type === 'text'
+    return sel && (sel.type === 'text' || sel.type === 'serial')
       ? { size: sel.textStyle.size, bold: sel.textStyle.bold, color: sel.textStyle.color }
       : null
   }
@@ -274,7 +317,10 @@ export class EditorController {
       switch (a.type) {
         case 'text':
           return { ...a, pos: { x: a.pos.x + dx, y: a.pos.y + dy } } as Annotation
+        case 'serial':
+          return { ...a, pos: { x: a.pos.x + dx, y: a.pos.y + dy } } as Annotation
         case 'pen':
+        case 'mosaic':
           return { ...a, points: a.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) } as Annotation
         case 'line':
         case 'arrow':
@@ -319,7 +365,7 @@ export class EditorController {
           { x: b.x + b.w, y: b.y + b.h }, // 2 se
           { x: b.x, y: b.y + b.h } // 3 sw
         ]
-        if (sel.type === 'text' || sel.type === 'pen') return pts
+        if (sel.type === 'text' || sel.type === 'pen' || sel.type === 'serial' || sel.type === 'mosaic') return pts
         const mx = b.x + b.w / 2
         const my = b.y + b.h / 2
         pts.push(
@@ -400,18 +446,35 @@ export class EditorController {
       this.onSelectionChange?.()
       return
     }
-    // box 系(rect/ellipse/highlight/mosaic)：对角固定的 W/H 缩放
-    // pen：整体等比缩放 points
+    // serial：整体等比缩放圆点半径（含说明文字字号），对角对称锚点
+    if (sel.type === 'serial') {
+      const anchor = this.resizeAnchor(s, this.resizeHandle)
+      const d0 = Math.hypot(s.x + s.w - anchor.x, s.y + s.h - anchor.y)
+      const d1 = Math.hypot(nx - anchor.x, ny - anchor.y)
+      const k = d1 / Math.max(d0, 0.001)
+      if (!this.resizedOnce) {
+        this.resizedOnce = true
+        this.history.push(this.list)
+      }
+      this.list = this.list.map((a) =>
+        a.id === sel.id && a.type === 'serial' ? { ...a, radius: Math.max(6, Math.round(a.radius * k)), textStyle: { ...a.textStyle, size: Math.max(10, Math.round(a.textStyle.size * k)) } } : a
+      )
+      this.render()
+      this.onSelectionChange?.()
+      return
+    }
+    // box 系(rect/ellipse/highlight)：对角固定的 W/H 缩放
+    // pen / mosaic：整体等比缩放 points
     if (!this.resizedOnce) {
       this.resizedOnce = true
       this.history.push(this.list)
     }
-    if (sel.type === 'pen') {
+    if (sel.type === 'pen' || sel.type === 'mosaic') {
       const anchor = this.resizeAnchor(s, this.resizeHandle)
       const startH = { x: s.x + (this.resizeHandle === 1 || this.resizeHandle === 2 ? s.w : 0), y: s.y + (this.resizeHandle >= 2 ? s.h : 0) }
       const k = (Math.abs(nx - anchor.x) + Math.abs(ny - anchor.y)) / Math.max((Math.abs(startH.x - anchor.x) + Math.abs(startH.y - anchor.y)) || 1, 1)
       this.list = this.list.map((a) =>
-        a.id === sel.id && a.type === 'pen'
+        (a.id === sel.id) && (a.type === 'pen' || a.type === 'mosaic')
           ? { ...a, points: a.points.map((p) => ({ x: anchor.x + (p.x - anchor.x) * k, y: anchor.y + (p.y - anchor.y) * k })) }
           : a
       )
@@ -505,6 +568,10 @@ export class EditorController {
         const tb = this.textBounds(a)
         return x >= tb.x - tol && x <= tb.x + tb.w + tol && y >= tb.y - tol && y <= tb.y + tb.h + tol
       }
+      case 'serial': {
+        const b = this.serialBounds(a)
+        return x >= b.x - tol && x <= b.x + b.w + tol && y >= b.y - tol && y <= b.y + b.h + tol
+      }
       case 'pen':
         return a.points.some((p) => Math.abs(p.x - x) <= tol && Math.abs(p.y - y) <= tol)
       case 'line':
@@ -513,19 +580,71 @@ export class EditorController {
       case 'rect':
       case 'ellipse':
       case 'highlight':
-      case 'mosaic':
         return (
           x >= a.rect.x - tol &&
           x <= a.rect.x + a.rect.w + tol &&
           y >= a.rect.y - tol &&
           y <= a.rect.y + a.rect.h + tol
         )
+      case 'mosaic': {
+        // 涂抹打码：命中的是任一轨迹点附近（格半径 + tol）
+        const r = a.cell / 2 + tol
+        return a.points.some((p) => Math.abs(p.x - x) <= r && Math.abs(p.y - y) <= r)
+      }
     }
   }
 
   // ── 文字输入落地 ──
 
+  /** serial 工具：在 pos 处创建一个序号标注，半径跟随字号，并弹出说明文字输入 */
+  private createSerial(pos: Point): void {
+    const size = this.settings.textStyle.size
+    const radius = Math.max(10, size * 0.55)
+    this.list = [
+      ...this.list,
+      {
+        id: genId(),
+        type: 'serial',
+        pos: { ...pos },
+        number: this.serialCounter++,
+        text: '',
+        radius,
+        textStyle: { ...this.settings.textStyle, size: Math.max(12, Math.round(size * 0.6)) }
+      }
+    ]
+    this.history.push(this.list)
+    this.selectedId = this.list[this.list.length - 1].id
+    this.render()
+    this.onSelectionChange?.()
+    // 立即请求输入说明文字（就原框就地编辑）
+    const sel = this.selected
+    if (sel && sel.type === 'serial') {
+      this.editingSerialId = sel.id
+      const sb = this.serialBounds(sel)
+      this.onTextRequest?.({ x: sb.x, y: sb.y, w: sb.w, h: sb.h })
+      this.render()
+    }
+  }
+
+  /** 更新序号标注的说明文字（commit 时不含序号数字本身，避免误改数字） */
+  private commitSerialText(id: string, text: string): void {
+    const found = this.list.find((a) => a.id === id && a.type === 'serial')
+    if (!found || found.type !== 'serial') return
+    if (found.text === text) return
+    this.list = this.list.map((a) => (a.id === id && a.type === 'serial' ? { ...a, text } : a))
+    this.history.push(this.list)
+    this.render()
+    this.onSelectionChange?.()
+  }
+
   commitText(text: string): void {
+    // 序号说明文字提交
+    if (this.editingSerialId) {
+      const id = this.editingSerialId
+      this.editingSerialId = null
+      this.commitSerialText(id, text)
+      return
+    }
     // 重新编辑既有文字（覆盖原内容，保留位置/样式）
     if (this.editingTextId) {
       const id = this.editingTextId
@@ -552,6 +671,8 @@ export class EditorController {
   cancelText(): void {
     this.pendingTextPos = null
     this.editingTextId = null
+    this.editingSerialId = null
+    this.render()
   }
 
   private clearDraft(): void {
@@ -569,6 +690,21 @@ export class EditorController {
     this.list = [
       ...this.list,
       { id: genId(), type: 'pen', points: pts.map((p) => ({ ...p })), style: { ...this.settings.style } }
+    ]
+    this.history.push(this.list)
+  }
+
+  private finishMosaic(pts: Point[]): void {
+    if (!pts.length) return
+    this.list = [
+      ...this.list,
+      {
+        id: genId(),
+        type: 'mosaic',
+        points: pts.map((p) => ({ ...p })),
+        cell: this.settings.mosaicCell,
+        shape: this.settings.mosaicShape
+      }
     ]
     this.history.push(this.list)
   }
@@ -617,18 +753,6 @@ export class EditorController {
         }
         break
       }
-      case 'mosaic': {
-        const x = Math.min(a.x, b.x)
-        const y = Math.min(a.y, b.y)
-        anno = {
-          id: baseId,
-          type: 'mosaic',
-          rect: { x, y, w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) },
-          cell: s.mosaicCell,
-          shape: s.mosaicShape
-        }
-        break
-      }
       default:
         return
     }
@@ -642,6 +766,7 @@ export class EditorController {
 
   private isMeaningful(a: Annotation): boolean {
     if (a.type === 'pen') return a.points.length >= 2
+    if (a.type === 'mosaic') return a.points.length >= 1
     if (a.type === 'text') return a.text.length > 0
     if ('rect' in a) return a.rect.w >= 2 && a.rect.h >= 2
     if (a.type === 'line' || a.type === 'arrow') {
@@ -660,9 +785,26 @@ export class EditorController {
     return { x: a.pos.x, y: a.pos.y, w: Math.max(width, 4), h: Math.max(height, a.textStyle.size) }
   }
 
+  /** 序号标注包围盒（圆点+说明文字，含 padding） */
+  private serialBounds(a: SerialAnno): { x: number; y: number; w: number; h: number } {
+    let right = a.pos.x + a.radius * 2
+    let bottom = a.pos.y + a.radius * 2
+    if (a.text) {
+      this.ctx.font = `${a.textStyle.size}px sans-serif`
+      const tw = this.ctx.measureText(a.text).width
+      right = Math.max(right, a.pos.x + a.radius + 8 + tw)
+      bottom = Math.max(bottom, a.pos.y + a.textStyle.size)
+    }
+    return { x: a.pos.x - a.radius, y: a.pos.y - a.radius, w: right - (a.pos.x - a.radius), h: bottom - (a.pos.y - a.radius) }
+  }
+
   /** 标注包围盒（供选中高亮） */
   private annoBounds(a: Annotation): { x: number; y: number; w: number; h: number } | null {
     switch (a.type) {
+      case 'serial': {
+        const sb = this.serialBounds(a)
+        return { x: sb.x - 2, y: sb.y - 2, w: sb.w, h: sb.h }
+      }
       case 'text': {
         const tb = this.textBounds(a)
         return { x: tb.x - 2, y: tb.y - 2, w: tb.w, h: tb.h }
@@ -680,6 +822,21 @@ export class EditorController {
           y2 = Math.max(y2, p.y)
         }
         return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 }
+      }
+      case 'mosaic': {
+        if (!a.points.length) return null
+        const pad = a.cell / 2
+        let x1 = a.points[0].x
+        let y1 = a.points[0].y
+        let x2 = a.points[0].x
+        let y2 = a.points[0].y
+        for (const p of a.points) {
+          x1 = Math.min(x1, p.x)
+          y1 = Math.min(y1, p.y)
+          x2 = Math.max(x2, p.x)
+          y2 = Math.max(y2, p.y)
+        }
+        return { x: x1 - pad, y: y1 - pad, w: x2 - x1 + a.cell, h: y2 - y1 + a.cell }
       }
       case 'line':
       case 'arrow':
@@ -700,7 +857,11 @@ export class EditorController {
     const h = this.canvas.height
     ctx.clearRect(0, 0, w, h)
     ctx.drawImage(this.source, 0, 0, w, h)
-    for (const a of this.list) drawAnnotation(ctx, a, this.source)
+    for (const a of this.list) {
+      // 就原框就地编辑期间：跳过该标注（文字由 DOM 编辑层「所见即所得」显示在原图上，避免重影）
+      if (a.id === this.editingTextId || a.id === this.editingSerialId) continue
+      drawAnnotation(ctx, a, this.source)
+    }
 
     // 选中标注高亮（虚线蓝框）
     const sel = this.selected
@@ -748,6 +909,20 @@ export class EditorController {
       }
       return
     }
+    if (d.tool === 'mosaic') {
+      // 涂抹预览：逐点实时画块（所见即所得）
+      const pts = d.pen!
+      if (pts.length) {
+        drawAnnotation(ctx, {
+          id: '',
+          type: 'mosaic',
+          points: pts.map((p) => ({ ...p })),
+          cell: this.settings.mosaicCell,
+          shape: this.settings.mosaicShape
+        }, this.source)
+      }
+      return
+    }
     const a = d.a
     const b = d.b
     const r = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) }
@@ -758,9 +933,6 @@ export class EditorController {
         break
       case 'arrow':
         tmp = { id: '', type: 'arrow', a: { ...a }, b: { ...b }, style: { ...this.settings.style } }
-        break
-      case 'mosaic':
-        tmp = { id: '', type: 'mosaic', rect: { ...r }, cell: this.settings.mosaicCell, shape: this.settings.mosaicShape }
         break
       case 'highlight':
         tmp = { id: '', type: 'highlight', rect: { ...r }, style: { ...this.settings.style } }

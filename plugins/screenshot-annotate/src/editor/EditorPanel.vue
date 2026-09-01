@@ -61,6 +61,7 @@ const tools: { kind: ToolKind; label: string }[] = [
   { kind: 'arrow', label: '箭头' },
   { kind: 'pen', label: '画笔' },
   { kind: 'text', label: '文字' },
+  { kind: 'serial', label: '序号' },
   { kind: 'mosaic', label: '马赛克' },
   { kind: 'line', label: '直线' },
   { kind: 'highlight', label: '高亮' }
@@ -75,22 +76,23 @@ const iconPath: Record<ToolKind, string[]> = {
   ellipse: ['M12 4 C18.5 4 21 8.5 21 12 C21 15.5 18.5 20 12 20 C5.5 20 3 15.5 3 12 C3 8.5 5.5 4 12 4 Z'],
   highlight: ['M5 6 L19 3 L20.5 8 L6.5 11 Z'],
   text: ['M5 5 H19', 'M12 5 V19'],
-  mosaic: ['M6 6 H12 V12 H6 Z', 'M12 6 H18 V12 H12 Z', 'M6 12 H12 V18 H6 Z', 'M12 12 H18 V18 H12 Z']
+  mosaic: ['M6 6 H12 V12 H6 Z', 'M12 6 H18 V12 H12 Z', 'M6 12 H12 V18 H6 Z', 'M12 12 H18 V18 H12 Z'],
+  serial: ['M12 4 A8 8 0 0 1 12 20 A8 8 0 0 1 12 4 Z', 'M11 16 V11 L9.5 12.2 V10 L12 8.5 H13.5 V16 Z']
 }
-const colors = ['#e5484d', '#ff9d00', '#ffd400', '#3ec46d', '#19b6ff', '#7146ff', '#000000', '#ffffff']
-const lineWidths = [2, 4, 6]
+/** 自定义取色器当前值（唯一取色方式，默认红色） */
+const customColor = ref('#e5484d')
 const currentTool = ref<ToolKind>('select')
 const color = ref('#e5484d')
 const lineWidth = ref(3)
 const fill = ref(false)
 const textSize = ref(28)
 const textBold = ref(false)
-const textSizes = [16, 20, 28, 36, 48]
 /** 当前选中了文字标注（控制工具栏字号/粗体控件显示） */
 const selectedIsText = ref(false)
 const mosaicShape = ref<'rect' | 'round'>('rect')
-const mosaicSizes = [10, 14, 20, 28, 40]
 const mosaicCell = ref(14)
+/** 马赛克涂抹时光标跟随的球/方块预览（canvas 坐标系，null=隐藏） */
+const mosaicPreview = ref<{ left: number; top: number; size: number; round: boolean } | null>(null)
 const canUndo = ref(false)
 const canRedo = ref(false)
 
@@ -169,8 +171,8 @@ function syncTextStyleFromSelection() {
 // 文字输入状态：定位到选中框内（居中浮层 → 改为画布框内）+ 落地
 const showTextDialog = ref(false)
 const editingText = ref('')
-/** 输入浮层在 canvas-wrap 内的 CSS 坐标（由框的图片像素折算） */
-const textPosCss = ref({ left: 0, top: 0, width: 200 })
+/** 就地编辑层在 canvas-wrap 内的 CSS 坐标（由文字框/落点图片像素折算） */
+const textPosCss = ref({ left: 0, top: 0, width: 200, height: 40 })
 
 function commitText() {
   if (!ctrl) return
@@ -194,13 +196,25 @@ function openTextInput(rect: { x: number; y: number; w: number; h: number }) {
   textPosCss.value = {
     left: cr.left - sr.left + rect.x * sx,
     top: cr.top - sr.top + rect.y * sy,
-    width: Math.max(160, rect.w * sx)
+    width: Math.max(120, rect.w * sx),
+    height: Math.max(28, rect.h * sy)
   }
   // 正在重编辑文字时回填其内容
   const sel = ctrl?.selected
-  editingText.value = sel && sel.type === 'text' ? sel.text : ''
+  editingText.value = sel && (sel.type === 'text' || sel.type === 'serial') ? sel.text : ''
   showTextDialog.value = true
   setTimeout(() => textInputRef.value?.focus(), 10)
+}
+
+/** 画布上双击：若命中的是文字/序号标注，进入就原框就地编辑 */
+function onDblClick(e: PointerEvent | MouseEvent) {
+  if (!ctrl) return
+  const p = localPoint(e as PointerEvent)
+  ctrl.selectAt(p.x, p.y)
+  const sel = ctrl.selected
+  if (sel && (sel.type === 'text' || sel.type === 'serial')) {
+    ctrl.startEditSelectedText()
+  }
 }
 
 function localPoint(e: PointerEvent): { x: number; y: number } {
@@ -238,7 +252,7 @@ let rafPending = false
 let winStartClientX = 0
 let winStartClientY = 0
 /** 当前拖动手势类型：无 / 移窗 / 拖动选中标注 / 拖缩放手柄改大小 */
-let dragType: 'none' | 'window' | 'annotation' | 'resize' = 'none'
+let dragType: 'none' | 'window' | 'annotation' | 'resize' | 'mosaic' = 'none'
 
 /** 经 sendToParent 送主窗口移动编辑器窗口到绝对屏幕坐标（子窗口无法直接操作主窗口建的窗口） */
 function moveEditorWindow(x: number, y: number) {
@@ -287,6 +301,12 @@ function onDown(e: PointerEvent) {
   // 用 selectAt（命中即选中）而非 beginDragSelected（要求"已选中"）：首击点到未选中标注时
   // beginDragSelected 返回 false 会误拖整窗 → 选不中原 bug。selectAt 命中首击即选中。
   const p = localPoint(e)
+  // 马赛克：自由涂抹，按下即沿轨迹打码，不做"点击已有标注→拖动/缩放"的命中判定
+  if (currentTool.value === 'mosaic') {
+    dragType = 'mosaic'
+    ctrl?.pointerDown(p.x, p.y)
+    return
+  }
   if (ctrl?.selectAt(p.x, p.y)) {
     if (ctrl?.hitHandleAt(p.x, p.y) && ctrl.beginResize(p.x, p.y)) {
       dragType = 'resize'
@@ -316,7 +336,33 @@ function forceEndDrag(pointerId?: number) {
   }
 }
 
+/** 马赛克工具：光标跟随的球/方块预览（随指针与 cell 大小更新），非马赛克时隐藏 */
+function updateMosaicPreview(e: PointerEvent) {
+  const cv = canvasRef.value
+  const stage = stageRef.value
+  if (!cv || !stage || currentTool.value !== 'mosaic' || !ctrl) {
+    mosaicPreview.value = null
+    return
+  }
+  const cr = cv.getBoundingClientRect()
+  const sr = stage.getBoundingClientRect()
+  const sx = cr.width / cv.width
+  const cell = Math.max(6, ctrl.settings.mosaicCell)
+  const p = localPoint(e)
+  const size = cell * sx
+  mosaicPreview.value = {
+    left: cr.left - sr.left + p.x * sx - size / 2,
+    top: cr.top - sr.top + p.y * sx - size / 2,
+    size,
+    round: ctrl.settings.mosaicShape === 'round'
+  }
+}
+function clearMosaicPreview() {
+  mosaicPreview.value = null
+}
+
 function onMove(e: PointerEvent) {
+  updateMosaicPreview(e)
   const cv = canvasRef.value
   if (!dragging) {
     // 未拖动：hover 在选中标注的缩放手柄上 → 显示缩放光标（line/arrow 端点用移动光标）
@@ -324,7 +370,12 @@ function onMove(e: PointerEvent) {
       const p = localPoint(e)
       const onHandle = !!(ctrl?.selected && ctrl?.hitHandleAt(p.x, p.y))
       const selType = ctrl?.selected?.type
-      cv.style.cursor = onHandle && selType !== 'line' && selType !== 'arrow' ? 'nwse-resize' : 'crosshair'
+      // 马赛克：隐藏系统光标，由 mosaic-preview 圆/方颗粒跟随充当自定义光标
+      if (currentTool.value === 'mosaic') {
+        cv.style.cursor = 'none'
+      } else {
+        cv.style.cursor = onHandle && selType !== 'line' && selType !== 'arrow' ? 'nwse-resize' : 'crosshair'
+      }
     }
     return
   }
@@ -376,13 +427,8 @@ function onUp(e: PointerEvent) {
   if (dragType === 'annotation') {
     if (dragMoved) {
       ctrl?.endDragSelected()
-    } else {
-      // 单击未拖：文字 → 再次编辑内容；其它标注保持选中
-      const sel = ctrl?.selected
-      if (sel && sel.type === 'text') {
-        ctrl?.startEditSelectedText()
-      }
     }
+    // 单击未拖：仅保持选中；双击（onDblClick）才进就原框就地编辑
     dragType = 'none'
     canUndo.value = !!ctrl?.canUndo
     canRedo.value = !!ctrl?.canRedo
@@ -419,29 +465,91 @@ function exportDataURL(): string {
   return ctrl!.canvasElement.toDataURL('image/png')
 }
 
-/** 全局按键：Esc 关闭编辑窗口 */
+/** 数字/字母键 → 工具映射（仅当焦点不在输入框内时生效） */
+const toolKeyMap: Record<string, ToolKind> = {
+  '1': 'select',
+  '2': 'rect',
+  '3': 'ellipse',
+  '4': 'arrow',
+  '5': 'pen',
+  '6': 'text',
+  '7': 'serial',
+  '8': 'mosaic',
+  '9': 'line',
+  '0': 'highlight',
+  v: 'select',
+  r: 'rect',
+  o: 'ellipse',
+  a: 'arrow',
+  b: 'pen',
+  t: 'text',
+  s: 'serial',
+  m: 'mosaic',
+  l: 'line',
+  h: 'highlight'
+}
+
+/** 焦点是否在可编辑元素里（数字/颜色输入、文字输入框）——此时不拦截按键 */
+function focusIsEditable(): boolean {
+  const t = document.activeElement
+  if (!t) return false
+  const tag = t.tagName
+  return tag === 'INPUT' || tag === 'TEXTAREA' || (t as HTMLElement).isContentEditable
+}
+
+/**
+ * 全局按键（焦点不在输入框内时）：
+ *   Esc 关闭；Delete/Backspace 删除选中；Ctrl+Z/Y 撤销/重做；Ctrl+C 复制；Ctrl+S 保存；
+ *   Ctrl+P 钉图；数字/字母键切换工具。
+ */
 function onGlobalKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
+  if (focusIsEditable()) return
+  const k = e.key
+  if (k === 'Escape') {
     props.onClose()
     return
   }
   if (e.ctrlKey || e.metaKey) {
-    const k = e.key.toLowerCase()
-    if (k === 'z') {
+    const lk = k.toLowerCase()
+    if (lk === 'z') {
       e.preventDefault()
       undo()
       return
     }
-    if (k === 'y') {
+    if (lk === 'y') {
       e.preventDefault()
       redo()
       return
     }
+    if (lk === 'c') {
+      e.preventDefault()
+      props.onCopy(exportDataURL())
+      return
+    }
+    if (lk === 's') {
+      e.preventDefault()
+      props.onSave(exportDataURL())
+      return
+    }
+    // Ctrl+P：钉图
+    if (lk === 'p') {
+      e.preventDefault()
+      props.onPin?.(exportDataURL())
+      return
+    }
+    return
   }
-  if ((e.key === 'Delete' || e.key === 'Backspace') && currentTool.value === 'select') {
+  if (k === 'Delete' || k === 'Backspace') {
+    e.preventDefault()
     ctrl?.deleteSelected()
     canUndo.value = !!ctrl?.canUndo
     canRedo.value = !!ctrl?.canRedo
+    return
+  }
+  // 数字/字母键切换工具
+  const mapped = toolKeyMap[k.toLowerCase()]
+  if (mapped) {
+    pickTool(mapped)
   }
 }
 
@@ -493,7 +601,7 @@ defineExpose({ exportDataURL })
       <div
         v-if="showTextDialog"
         class="text-dialog"
-        :style="{ left: textPosCss.left + 'px', top: textPosCss.top + 'px', width: textPosCss.width + 'px' }"
+        :style="{ left: textPosCss.left + 'px', top: textPosCss.top + 'px', width: textPosCss.width + 'px', height: textPosCss.height + 'px' }"
       >
         <textarea
           ref="textInputRef"
@@ -514,7 +622,15 @@ defineExpose({ exportDataURL })
         @pointerdown="onDown"
         @pointermove="onMove"
         @pointerup="onUp"
+        @dblclick="onDblClick"
         @wheel="onWheel"
+        @mouseleave="clearMosaicPreview"
+      />
+      <div
+        v-if="mosaicPreview"
+        class="mosaic-preview"
+        :class="{ round: mosaicPreview.round }"
+        :style="{ left: mosaicPreview.left + 'px', top: mosaicPreview.top + 'px', width: mosaicPreview.size + 'px', height: mosaicPreview.size + 'px' }"
       />
     </div>
 
@@ -549,72 +665,6 @@ defineExpose({ exportDataURL })
 
       <div class="tb-line" />
 
-      <!-- 颜色色板 -->
-      <div class="tb-group colors">
-        <button
-          v-for="c in colors"
-          :key="c"
-          class="swatch"
-          :class="{ on: color === c }"
-          :style="{ background: c }"
-          :title="c"
-          @click="pickColor(c)"
-        />
-      </div>
-
-      <div class="tb-group">
-        <button
-          v-for="w in lineWidths"
-          :key="w"
-          class="tb-w"
-          :class="{ on: lineWidth === w }"
-          :title="w + 'px'"
-          @click="pickWidth(w)"
-        >
-          {{ w }}
-        </button>
-        <button class="tb-icon" :class="{ on: fill }" title="填充" @click="toggleFill">
-          <svg viewBox="0 0 24 24" class="tb-svg"><path d="M4 6 H20 V12 H4 Z M4 14 H20 V18 H4 Z" /></svg>
-        </button>
-      </div>
-
-      <!-- 马赛克扩展：形状 + 尺寸 -->
-      <div v-if="currentTool === 'mosaic'" class="tb-group mosaic-o">
-        <button class="tb-icon" :class="{ on: mosaicShape === 'rect' }" title="方格" @click="pickMosaicShape('rect')">
-          <svg viewBox="0 0 24 24" class="tb-svg"><path d="M4 4 H20 V20 H4 Z M4 12 H20 M12 4 V20" /></svg>
-        </button>
-        <button class="tb-icon" :class="{ on: mosaicShape === 'round' }" title="球状" @click="pickMosaicShape('round')">
-          <svg viewBox="0 0 24 24" class="tb-svg"><path d="M12 4 A8 8 0 0 1 12 20 A8 8 0 0 1 12 4 Z M7 7 H17 M7 12 H17 M7 17 H17 M12 7 V17" /></svg>
-        </button>
-        <button
-          v-for="c in mosaicSizes"
-          :key="c"
-          class="tb-w"
-          :class="{ on: mosaicCell === c }"
-          :title="'格 ' + c"
-          @click="pickMosaicCell(c)"
-        >
-          {{ c }}
-        </button>
-      </div>
-
-      <!-- 文字扩展：字号 + 粗体（文字工具或选中文字时展开） -->
-      <div v-if="currentTool === 'text' || selectedIsText" class="tb-group">
-        <button class="tb-icon" :class="{ on: textBold }" title="粗体" @click="pickTextBold">
-          <svg viewBox="0 0 24 24" class="tb-svg"><path d="M7 4 H14 A3.5 3.5 0 0 1 14 11 H7 Z M7 11 H15 A3 3 0 0 1 15 18 H7 Z" /></svg>
-        </button>
-        <button
-          v-for="s in textSizes"
-          :key="s"
-          class="tb-w"
-          :class="{ on: textSize === s }"
-          :title="'字号 ' + s"
-          @click="pickTextSize(s)"
-        >
-          {{ s }}
-        </button>
-      </div>
-
       <div class="tb-spacer" />
 
       <!-- 底部操作：取消/复制/保存/钉图 -->
@@ -628,76 +678,172 @@ defineExpose({ exportDataURL })
         <button class="tb-icon primary" title="保存 (Ctrl+S)" @click="props.onSave(exportDataURL())">
           <svg viewBox="0 0 24 24" class="tb-svg"><path d="M12 4 V16 M6 11 L12 17 L18 11" /><path d="M4 19 V20 H20 V19" /></svg>
         </button>
-        <button v-if="props.onPin" class="tb-icon primary" title="钉图" @click="props.onPin!(exportDataURL())">
+        <button v-if="props.onPin" class="tb-icon primary" title="钉图 (Ctrl+P)" @click="props.onPin!(exportDataURL())">
           <svg viewBox="0 0 24 24" class="tb-svg"><path d="M8 21 L9 16 L5 12 V10 H19 V12 L15 16 L16 21 Z" /></svg>
         </button>
       </div>
     </div>
+
+    <!-- 工具定制条（仿微信：选中需要定制的工具时，在菜单栏正下方滑出的专属选项条） -->
+    <Transition name="wx-subbar">
+      <div
+        v-if="
+          currentTool === 'mosaic' ||
+          currentTool === 'rect' || currentTool === 'ellipse' || currentTool === 'arrow' ||
+          currentTool === 'pen' || currentTool === 'line' || currentTool === 'highlight' ||
+          currentTool === 'text' || currentTool === 'serial' || selectedIsText
+        "
+        class="wx-subbar"
+      >
+        <template v-if="currentTool === 'mosaic'">
+          <span class="subbar-label">马赛克</span>
+          <button class="tb-icon subbar-btn" :class="{ on: mosaicShape === 'rect' }" title="方格" @click="pickMosaicShape('rect')">
+            <svg viewBox="0 0 24 24" class="tb-svg"><path d="M4 4 H20 V20 H4 Z M4 12 H20 M12 4 V20" /></svg>
+          </button>
+          <button class="tb-icon subbar-btn" :class="{ on: mosaicShape === 'round' }" title="球状" @click="pickMosaicShape('round')">
+            <svg viewBox="0 0 24 24" class="tb-svg"><path d="M12 4 A8 8 0 0 1 12 20 A8 8 0 0 1 12 4 Z M7 7 H17 M7 12 H17 M7 17 H17 M12 7 V17" /></svg>
+          </button>
+          <span class="subbar-sep" />
+          <input
+            v-model.number="mosaicCell"
+            class="num-input"
+            type="number"
+            min="4"
+            max="80"
+            title="马赛克格大小(px)"
+            @change="pickMosaicCell(Number(mosaicCell) || 14)"
+          />
+          <span class="num-label">px</span>
+        </template>
+
+        <template v-else>
+          <span v-if="selectedIsText" class="subbar-label">标注</span>
+          <label class="custom-color" title="自定义颜色">
+            <input
+              v-model="customColor"
+              type="color"
+              @input="pickColor(customColor)"
+            />
+          </label>
+          <span class="subbar-sep" />
+          <input
+            v-model.number="lineWidth"
+            class="num-input"
+            type="number"
+            min="1"
+            max="40"
+            title="线宽(px)"
+            @change="pickWidth(Number(lineWidth) || 3)"
+          />
+          <span class="num-label">px</span>
+          <button class="tb-icon subbar-btn" :class="{ on: fill }" title="填充" @click="toggleFill">
+            <svg viewBox="0 0 24 24" class="tb-svg"><path d="M4 6 H20 V12 H4 Z M4 14 H20 V18 H4 Z" /></svg>
+          </button>
+          <template v-if="currentTool === 'text' || currentTool === 'serial' || selectedIsText">
+            <span class="subbar-sep" />
+            <button class="tb-icon subbar-btn" :class="{ on: textBold }" title="粗体" @click="pickTextBold">
+              <svg viewBox="0 0 24 24" class="tb-svg"><path d="M7 4 H14 A3.5 3.5 0 0 1 14 11 H7 Z M7 11 H15 A3 3 0 0 1 15 18 H7 Z" /></svg>
+            </button>
+            <input
+              v-model.number="textSize"
+              class="num-input"
+              type="number"
+              min="12"
+              max="96"
+              title="字号"
+              @change="pickTextSize(Number(textSize) || 28)"
+            />
+            <span class="num-label">px</span>
+          </template>
+        </template>
+      </div>
+    </Transition>
   </div>
 </template>
 
 <style scoped>
-/* ── 整窗深色遮罩（微信截图式）── */
+/* ── 透明承载窗口（截图标注编辑）── */
 .editor-canvas-stage {
   position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: #1c1c20;
+  /* 透明：图片与底部悬浮工具条之间、四周均为可见透明区，构成"图片外独立窗口"的观感 */
+  background: transparent;
   overflow: hidden;
   user-select: none;
 }
+/* 图片区 + 图片四周的透明留白：透明留白设为可拖拽区（-webkit-app-region drag），
+   用户可从这里拖动整个窗口；canvas 本身 no-drag 覆盖，保证绘制/选择不被拖拽拦截 */
 .canvas-wrap {
-  position: absolute;
-  inset: 0;
+  flex: 1;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  -webkit-app-region: drag;
 }
-/* 图片区域：圆角 + 微描边 + 阴影，悬浮于遮罩之上 */
+/* 图片区域：圆角 + 阴影悬浮于透明窗口之上，类似 shortcut-capture 的图片卡片 */
 .editor-canvas {
   display: block;
   background: #000;
   cursor: crosshair;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
   transform-origin: center center;
   touch-action: none;
+  -webkit-app-region: no-drag;
 }
-/* 文字输入浮层：定位到框内（left/top 由 openTextInput 折算） */
+/* 马赛克涂抹光标预览：跟随鼠标的球/方块（形状随 tangent 配置） */
+.mosaic-preview {
+  position: absolute;
+  z-index: 25;
+  pointer-events: none;
+  box-sizing: border-box;
+  border: 1.5px solid rgba(58, 118, 240, 0.9);
+  background: rgba(58, 118, 240, 0.18);
+  border-radius: 2px;
+}
+.mosaic-preview.round {
+  border-radius: 50%;
+}
+/* 就地编辑层：覆盖在文字原包围盒上方，透明背景 + 虚线蓝框，「所见即所得」在原框修改 */
 .text-dialog {
   position: absolute;
   z-index: 30;
   transform-origin: 0 0;
+  min-height: 38px;
   -webkit-app-region: no-drag;
 }
 .text-input {
-  width: 100%;
-  min-height: 40px;
   box-sizing: border-box;
-  padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.72);
-  color: #fff;
-  border: 1.5px dashed #4c8dff;
-  border-radius: 6px;
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--edit-color, #fff);
+  border: 1.5px dashed #3a76f0;
+  border-radius: 3px;
   outline: none;
-  font-weight: bold;
   font-family: sans-serif;
+  line-height: 1.2;
   resize: none;
   white-space: pre-wrap;
-  overflow: hidden;
+  word-break: break-all;
+  overflow: auto;
+  text-align: left;
+  caret-color: #3a76f0;
 }
 .text-input::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.55);
 }
 
-/* ── 右侧竖向浮动工具条（微信截图式图标栏）── */
+/* ── 独立悬浮工具条（仿 shortcut-capture）：位于图片下方透明区、与图片分离的毛玻璃条 ── */
 .wx-toolbar {
-  /* 悬浮覆盖图片底部（窗口贴合选区、图片占满时，按钮即"底层"） */
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  flex: 0 0 auto;
   z-index: 20;
   display: flex;
   flex-direction: row;
@@ -705,9 +851,16 @@ defineExpose({ exportDataURL })
   justify-content: center;
   align-items: center;
   gap: 6px;
-  max-width: 100%;
-  padding: 18px 10px 10px;
-  background: linear-gradient(transparent, rgba(18, 20, 26, 0.86) 38%);
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  margin: 2px auto 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(20, 22, 28, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(16px) saturate(1.3);
+  -webkit-backdrop-filter: blur(16px) saturate(1.3);
   -webkit-app-region: no-drag;
   user-select: none;
 }
@@ -725,6 +878,54 @@ defineExpose({ exportDataURL })
 }
 .tb-spacer {
   width: 6px;
+}
+/* 工具定制条（仿微信）：出现在主菜单栏正下方，选中需要定制的工具才滑出 */
+.wx-subbar {
+  flex: 0 0 auto;
+  z-index: 19;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  margin: -4px auto 12px;
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: rgba(28, 30, 38, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-app-region: no-drag;
+  user-select: none;
+}
+.subbar-label {
+  font-size: 12px;
+  color: #8a90a0;
+  margin-right: 2px;
+}
+.subbar-btn {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+}
+.subbar-sep {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.14);
+  margin: 0 2px;
+}
+/* 滑出/收起过渡 */
+.wx-subbar-enter-active,
+.wx-subbar-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.wx-subbar-enter-from,
+.wx-subbar-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 .tb-icon {
   width: 36px;
@@ -773,26 +974,57 @@ defineExpose({ exportDataURL })
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-/* 色板：横向单行小圆点 */
-.tb-group.colors {
-  flex-direction: row;
-  flex-wrap: nowrap;
-  gap: 4px;
-  padding: 0 4px;
-}
-.swatch {
+/* 自定义取色器：彩虹渐变指示条 + 原生 color 输入，点击打开系统色板 */
+.custom-color {
+  position: relative;
   width: 20px;
   height: 20px;
+  margin: 0 2px;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, 0.25);
+  overflow: hidden;
   cursor: pointer;
-  padding: 0;
+  background: conic-gradient(
+    #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000
+  );
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
   -webkit-app-region: no-drag;
 }
-.swatch.on {
-  outline: 2px solid #3a76f0;
-  outline-offset: 2px;
+.custom-color input {
+  position: absolute;
+  inset: -10px;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+/* 数字输入框：线宽/字号动态调节 */
+.num-input {
+  width: 52px;
+  height: 30px;
+  margin: 0 2px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e6e9ef;
+  font-size: 12px;
+  text-align: center;
+  outline: none;
+  -webkit-app-region: no-drag;
+}
+.num-input:focus {
+  border-color: #3a76f0;
+  background: rgba(58, 118, 240, 0.15);
+}
+.num-label {
+  color: #8b93a1;
+  font-size: 11px;
+  margin-left: 2px;
 }
 /* 线宽小号 */
 .tb-w {

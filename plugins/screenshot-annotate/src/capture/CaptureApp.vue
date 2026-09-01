@@ -88,7 +88,8 @@ onMounted(() => {
 .cap-root {
   width: 100%;
   height: 100%;
-  background: #1c1c20;
+  /* 透明承载窗口：图片与悬浮工具条之间、四周均为可见的透明区域 */
+  background: transparent;
   display: flex;
   align-items: center;
   justify-content: center;

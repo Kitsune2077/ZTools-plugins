@@ -139,7 +139,8 @@ function onWheel(e: WheelEvent) {
 // ── 双击：回到图片自然尺寸（自适应） ──
 function fitNatural() {
   if (!winId || !naturalW || !naturalH) return
-  const pad = 16
+  // 贴合图片自然尺寸（仅留极小边距保证圆角阴影不被裁切，透明区无黑框）
+  const pad = 4
   const nw = naturalW + pad * 2
   const nh = naturalH + pad * 2
   pinCmd('setBounds', { bounds: { x: 0, y: 0, width: nw, height: nh } })
@@ -197,8 +198,6 @@ onBeforeUnmount(() => {
       @wheel.prevent="onWheel"
       @dblclick="fitNatural"
     />
-
-    <button v-if="imgSrc" class="pin-close" title="关闭 (Esc)" @click="closeWin">✕</button>
 
     <div v-if="menu" class="pin-menu" :style="{ left: menu.x + 'px', top: menu.y + 'px' }">
       <button @click="copyImg">复制</button>
