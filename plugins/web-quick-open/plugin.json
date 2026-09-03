@@ -17,6 +17,20 @@
       "explain": "管理网页快开",
       "icon": "logo.png",
       "cmds": ["网页快开", "Web Quick Open"]
+    },
+    {
+      "code": "main-push",
+      "explain": "添加网址",
+      "icon": "logo.png",
+      "mainPush": true,
+      "cmds": [
+        {
+          "type": "over",
+          "label": "添加网址",
+          "minLength": 1,
+          "maxLength": 2048
+        }
+      ]
     }
   ]
 }
