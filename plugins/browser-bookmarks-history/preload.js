@@ -214,7 +214,7 @@ window.ztools.onMainPush(async ({ payload }) => {
   else openUrlByEdge(option.url)
 })
 
-function makeSearchAction (filter) {
+function makeSearchAction (filter, keepInput) {
   return {
     mode: 'list',
     args: {
@@ -222,7 +222,7 @@ function makeSearchAction (filter) {
         ensureBookmarks()
         ensureHistory().catch(() => {})
         ensureFavicons().catch(() => {})
-        if (action.payload && typeof action.payload === 'string') {
+        if (keepInput && action.payload && typeof action.payload === 'string') {
           setTimeout(() => { window.ztools.setSubInputValue(action.payload) })
         }
       },
@@ -355,7 +355,7 @@ window.exports = {
   chrome_history: makeSearchAction({ browser: 'chrome', source: 'history' }),
   edge_bookmarks: makeSearchAction({ browser: 'edge', source: 'bookmark' }),
   edge_history: makeSearchAction({ browser: 'edge', source: 'history' }),
-  search: makeSearchAction({}),
+  search: makeSearchAction({}, true),
   settings: settingsAction
 }
 
