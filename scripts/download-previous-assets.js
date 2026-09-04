@@ -78,12 +78,23 @@ async function downloadFile(url, destPath) {
   return new Promise((resolve, reject) => {
     get(url, (response) => {
       if (response.statusCode === 302 || response.statusCode === 301) {
-        // 处理重定向
-        downloadFile(response.headers.location, destPath).then(resolve).catch(reject);
+        // Consume the redirect response so its HTTPS socket can be released.
+        const redirectUrl = response.headers.location;
+        response.resume();
+
+        if (!redirectUrl) {
+          reject(new Error('下载失败: 重定向响应缺少 Location'));
+          return;
+        }
+
+        downloadFile(redirectUrl, destPath).then(resolve).catch(reject);
         return;
       }
 
       if (response.statusCode !== 200) {
+        // Drain the response before retrying so failed requests do not leave
+        // an active socket waiting for the Node process to exit.
+        response.resume();
         reject(new Error(`下载失败: ${response.statusCode}`));
         return;
       }

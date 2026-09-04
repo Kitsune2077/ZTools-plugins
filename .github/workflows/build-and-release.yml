@@ -223,23 +223,34 @@ jobs:
             echo "无变更信息" >> release/release-body.md
           fi
 
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.detect.outputs.release_version }}
-          name: Release v${{ needs.detect.outputs.release_version }}
-          body_path: release/release-body.md
-          preserve_order: true
-          files: |
-            release/*.zip
+      - name: Publish Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: v${{ needs.detect.outputs.release_version }}
+          RELEASE_TITLE: Release v${{ needs.detect.outputs.release_version }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # Keep the manifest assets in a fixed order and add only the ZIPs
+          # produced by this run. nullglob keeps deletion-only releases valid.
+          assets=(
             release/plugins.json
             release/categories.json
             release/layout.yaml
             release/latest
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          )
+          shopt -s nullglob
+          assets+=(release/*.zip)
+          shopt -u nullglob
+
+          echo "Creating release ${RELEASE_TAG}..."
+          gh release create "${RELEASE_TAG}" \
+            "${assets[@]}" \
+            --repo "${REPOSITORY}" \
+            --title "${RELEASE_TITLE}" \
+            --notes-file release/release-body.md \
+            --latest
 
       - name: Trigger EdgeOne build hook
         run: |
