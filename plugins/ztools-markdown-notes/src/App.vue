@@ -48,6 +48,8 @@ const operationMessage = ref('')
 const pendingDelete = ref<WorkspaceTreeEntry | null>(null)
 const isRefreshing = ref(false)
 const isCreateMenuOpen = ref(false)
+const isEditorMenuOpen = ref(false)
+const markdownImportInput = ref<HTMLInputElement | null>(null)
 const editorMode = ref<'ir' | 'sv'>('ir')
 const operationTone = ref<'error' | 'success'>('error')
 const previewImage = ref<{ src: string; alt: string } | null>(null)
@@ -465,6 +467,7 @@ function closeTransientUi() {
   isExpiredTrashOpen.value = false
   openEntryMenuPath.value = null
   isCreateMenuOpen.value = false
+  isEditorMenuOpen.value = false
   isRootDropActive.value = false
   closeSearch()
   closeFind()
@@ -732,6 +735,7 @@ watch(globalFeatureSignature, () => {
 function closeEntryMenu(event?: MouseEvent) {
   openEntryMenuPath.value = null
   isCreateMenuOpen.value = false
+  isEditorMenuOpen.value = false
   if (!(event?.target instanceof HTMLElement) || !event.target.closest('.search-results')) closeSearch()
 }
 
@@ -938,9 +942,10 @@ function handleShortcut(event: KeyboardEvent) {
     isOutlineOpen.value = false
     return
   }
-  if (event.key === 'Escape' && (openEntryMenuPath.value || isCreateMenuOpen.value)) {
+  if (event.key === 'Escape' && (openEntryMenuPath.value || isCreateMenuOpen.value || isEditorMenuOpen.value)) {
     openEntryMenuPath.value = null
     isCreateMenuOpen.value = false
+    isEditorMenuOpen.value = false
     return
   }
   if (event.key === 'Escape') {
@@ -971,6 +976,55 @@ function handleShortcut(event: KeyboardEvent) {
 function setEditorMode(mode: 'ir' | 'sv') {
   editorMode.value = mode
   if (hasRuntime.value) saveEditorMode(mode)
+}
+
+function downloadCurrentNote(content: string, extension: 'md' | 'html', mimeType: string) {
+  if (!activeNotePath.value) return
+  const fileName = activeNotePath.value.split('/').at(-1)?.replace(/\.md$/i, '') || '笔记'
+  const url = URL.createObjectURL(new Blob([content], { type: `${mimeType};charset=utf-8` }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${fileName}.${extension}`
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function exportMarkdown() {
+  isEditorMenuOpen.value = false
+  downloadCurrentNote(editorContent.value, 'md', 'text/markdown')
+  showOperationSuccess('已导出 Markdown')
+}
+
+function escapeHtml(value: string) {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
+}
+
+function exportHtml() {
+  isEditorMenuOpen.value = false
+  const title = activeNotePath.value?.split('/').at(-1)?.replace(/\.md$/i, '') || '笔记'
+  const body = markdownEditor.value?.getHtml() || `<pre>${escapeHtml(editorContent.value)}</pre>`
+  const html = `<!doctype html>\n<html lang="zh-CN">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${escapeHtml(title)}</title>\n<style>body{max-width:920px;margin:0 auto;padding:40px 24px;color:#172033;font:16px/1.7 system-ui,sans-serif}img{max-width:100%;height:auto}pre,code{font-family:ui-monospace,monospace}pre{overflow:auto;padding:16px;background:#f6f8fa;border-radius:8px}table{width:100%;border-collapse:collapse}th,td{padding:8px;border:1px solid #d0d7de}blockquote{margin-left:0;padding-left:16px;border-left:4px solid #d0d7de;color:#57606a}</style>\n</head>\n<body>${body}</body>\n</html>\n`
+  downloadCurrentNote(html, 'html', 'text/html')
+  showOperationSuccess('已导出 HTML')
+}
+
+function requestMarkdownImport() {
+  isEditorMenuOpen.value = false
+  markdownImportInput.value?.click()
+}
+
+async function importMarkdown(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (!window.confirm(`导入“${file.name}”将替换当前笔记内容，是否继续？`)) return
+  try {
+    editorContent.value = await file.text()
+    showOperationSuccess(`已导入 ${file.name}，正在自动保存`)
+  } catch (error) {
+    showOperationError(error instanceof Error ? error.message : 'Markdown 导入失败')
+  }
 }
 
 function selectOutlineHeading(headingIndex: number) {
@@ -1983,10 +2037,34 @@ watch(activeNotePath, () => {
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2M4 12h2M4 18h2M10 6h10M10 12h10M10 18h10" /></svg>
               </button>
-              <select :value="editorMode" aria-label="编辑模式" @change="setEditorMode(($event.target as HTMLSelectElement).value as 'ir' | 'sv')">
-                <option value="ir">即时渲染</option>
-                <option value="sv">Markdown 源码</option>
-              </select>
+              <div class="editor-more-menu" @click.stop>
+                <button
+                  type="button"
+                  class="editor-more-trigger"
+                  aria-label="更多编辑器操作"
+                  title="更多"
+                  :aria-expanded="isEditorMenuOpen"
+                  @click="isEditorMenuOpen = !isEditorMenuOpen"
+                >⋮</button>
+                <div v-if="isEditorMenuOpen" class="editor-more-popover">
+                  <button type="button" @click="setEditorMode(editorMode === 'ir' ? 'sv' : 'ir'); isEditorMenuOpen = false">
+                    <span class="menu-check">{{ editorMode === 'ir' ? '✓' : '' }}</span>
+                    即时渲染
+                  </button>
+                  <span class="editor-menu-divider" />
+                  <button type="button" @click="requestMarkdownImport">导入 Markdown…</button>
+                  <button type="button" @click="exportMarkdown">导出 Markdown</button>
+                  <button type="button" @click="exportHtml">导出为 HTML</button>
+                </div>
+              </div>
+              <input
+                ref="markdownImportInput"
+                class="visually-hidden"
+                type="file"
+                accept=".md,.markdown,.txt,text/markdown,text/plain"
+                tabindex="-1"
+                @change="importMarkdown"
+              />
             </div>
           </header>
           <MarkdownEditor

@@ -188,6 +188,7 @@ function createEditor() {
     cache: { enable: false },
     preview: {
       mode: 'editor',
+      maxWidth: 100000,
       theme: {
         current: darkThemeQuery.matches ? 'dark' : 'light',
       },
@@ -377,6 +378,10 @@ function clearFind() {
   clearFindHighlight()
 }
 
+function getHtml() {
+  return editor?.getHTML() ?? ''
+}
+
 function handleFullscreenShortcut(event: KeyboardEvent) {
   if (!isFullscreen.value) return
   const isExitShortcut = event.key === 'Escape' || (event.ctrlKey && event.key === '`')
@@ -386,7 +391,7 @@ function handleFullscreenShortcut(event: KeyboardEvent) {
   exitFullscreen()
 }
 
-defineExpose({ scrollToHeading, exitFullscreen, insertNoteLink, insertTable, findInNote, clearFind })
+defineExpose({ scrollToHeading, exitFullscreen, insertNoteLink, insertTable, findInNote, clearFind, getHtml })
 
 onMounted(() => {
   window.addEventListener('keydown', handleFullscreenShortcut, true)
