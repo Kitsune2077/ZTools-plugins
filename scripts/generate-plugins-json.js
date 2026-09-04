@@ -255,8 +255,7 @@ async function imageToBase64(imagePath) {
 
     return `data:image/png;base64,${buffer.toString('base64')}`;
   } catch (error) {
-    console.error(`处理图片失败: ${imagePath}`, error.message);
-    return null;
+    throw new Error(`处理图片失败: ${imagePath}: ${error.message}`, { cause: error });
   }
 }
 
@@ -294,10 +293,17 @@ async function processZipFile(zipFileName) {
       const logoPath = findLogoFile(extractDir, pluginInfo.logo);
       if (logoPath) {
         console.log(`  找到logo: ${logoPath}`);
-        logoBase64 = await imageToBase64(logoPath);
-        if (logoBase64) {
-          console.log(`  ✓ logo已转换为base64`);
+        try {
+          logoBase64 = await imageToBase64(logoPath);
+        } catch (error) {
+          const logoError = new Error(
+            `插件 ${pluginInfo.name || pluginName} 的 logo 无法转换为Base64: ${error.message}`,
+            { cause: error }
+          );
+          logoError.code = 'PLUGIN_LOGO_PROCESSING_FAILED';
+          throw logoError;
         }
+        console.log(`  ✓ logo已转换为base64`);
       } else {
         console.warn(`  ⚠ 找不到logo文件: ${pluginInfo.logo}`);
       }
@@ -324,6 +330,9 @@ async function processZipFile(zipFileName) {
     return result;
   } catch (error) {
     console.error(`  ✗ 处理失败: ${error.message}`);
+    if (error.code === 'PLUGIN_LOGO_PROCESSING_FAILED') {
+      throw error;
+    }
     return null;
   }
 }
