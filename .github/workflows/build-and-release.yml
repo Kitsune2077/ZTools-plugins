@@ -192,7 +192,6 @@ jobs:
           else
             echo "本次没有需要上传的插件 ZIP（可能仅删除插件）"
           fi
-          node -e "const fs = require('fs'); const info = JSON.parse(fs.readFileSync('release/build-info.json', 'utf8')); fs.writeFileSync('release/latest', info.releaseVersion, 'utf8')"
           ls -la release
 
       - name: Download previous release manifest
@@ -202,9 +201,6 @@ jobs:
 
       - name: Generate plugins.json
         run: node scripts/generate-plugins-json.js
-
-      - name: Prepare layout.yaml
-        run: cp layout.yaml release/layout.yaml
 
       - name: Prepare release body
         run: |
@@ -236,9 +232,6 @@ jobs:
           # produced by this run. nullglob keeps deletion-only releases valid.
           assets=(
             release/plugins.json
-            release/categories.json
-            release/layout.yaml
-            release/latest
           )
           shopt -s nullglob
           assets+=(release/*.zip)
