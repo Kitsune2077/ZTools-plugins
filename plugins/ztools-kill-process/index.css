@@ -434,7 +434,7 @@ input[type="checkbox"]:indeterminate::before {
 /* List Table Header */
 .table-header {
   display: grid;
-  grid-template-columns: 36px minmax(180px, 3fr) 100px 140px 90px;
+  grid-template-columns: 36px minmax(140px, 3fr) 75px 130px 90px 65px;
   padding: 10px 16px;
   background-color: var(--bg-header);
   border-bottom: 1px solid var(--border-color);
@@ -504,7 +504,7 @@ input[type="checkbox"]:indeterminate::before {
 
 .process-item {
   display: grid;
-  grid-template-columns: 36px minmax(180px, 3fr) 100px 140px 90px;
+  grid-template-columns: 36px minmax(140px, 3fr) 75px 130px 90px 65px;
   align-items: center;
   padding: 9px 12px;
   margin-bottom: 4px;
@@ -554,6 +554,49 @@ input[type="checkbox"]:indeterminate::before {
   font-family: var(--font-mono);
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+.port-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.port-badge {
+  background-color: rgba(16, 185, 129, 0.12);
+  color: var(--accent-green);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.port-badge-active {
+  background-color: rgba(59, 130, 246, 0.12);
+  color: var(--accent-blue);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.port-badge-more {
+  background-color: var(--bg-surface-hover);
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 1px 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.no-port {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  opacity: 0.5;
 }
 
 .mem-cell {

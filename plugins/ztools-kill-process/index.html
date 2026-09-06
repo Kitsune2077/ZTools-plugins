@@ -29,7 +29,7 @@
           <circle cx="11" cy="11" r="8"></circle>
           <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
         </svg>
-        <input type="text" id="searchInput" class="search-input" placeholder="搜索进程名称 / PID... (按 Esc 清空)" autocomplete="off" autofocus>
+        <input type="text" id="searchInput" class="search-input" placeholder="搜索进程名称 / PID / 占用端口 (如 8080 或 :3000)... (按 Esc 清空)" autocomplete="off" autofocus>
         <div id="searchClear" class="search-clear" title="清空搜索">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -68,6 +68,10 @@
     </div>
     <div class="table-header-cell sortable" id="thPID">
       <span>PID</span>
+      <span class="sort-icon"></span>
+    </div>
+    <div class="table-header-cell sortable" id="thPort">
+      <span>占用端口</span>
       <span class="sort-icon"></span>
     </div>
     <div class="table-header-cell sortable" id="thMem">
