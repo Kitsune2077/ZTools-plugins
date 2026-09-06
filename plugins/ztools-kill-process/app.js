@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Header click sort handlers
   const thName = document.getElementById('thName');
   const thPID = document.getElementById('thPID');
+  const thPort = document.getElementById('thPort');
   const thMem = document.getElementById('thMem');
 
   // Modal Elements
@@ -88,11 +89,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Resolution of process service from preload
   const processService = window.services || window.processService || {
     getProcesses: async () => [
-      { name: 'chrome.exe', pid: 12100, memoryStr: '132.3 MB', memoryKB: 135480 },
-      { name: 'Antigravity.exe', pid: 65176, memoryStr: '252.4 MB', memoryKB: 258488 },
-      { name: 'ZTools.exe', pid: 56044, memoryStr: '91.9 MB', memoryKB: 94092 },
-      { name: 'WeChatAppEx.exe', pid: 54964, memoryStr: '133.1 MB', memoryKB: 136308 },
-      { name: 'Unity.exe', pid: 28976, memoryStr: '0.96 GB', memoryKB: 1002752 }
+      { name: 'chrome.exe', pid: 12100, memoryStr: '132.3 MB', memoryKB: 135480, listeningPorts: [8080, 8081], allPorts: [8080, 8081], primaryPort: 8080, portsStr: ':8080, :8081' },
+      { name: 'Antigravity.exe', pid: 65176, memoryStr: '252.4 MB', memoryKB: 258488, listeningPorts: [], allPorts: [54321], primaryPort: 54321, portsStr: ':54321' },
+      { name: 'ZTools.exe', pid: 56044, memoryStr: '91.9 MB', memoryKB: 94092, listeningPorts: [], allPorts: [], primaryPort: Infinity, portsStr: '' },
+      { name: 'WeChatAppEx.exe', pid: 54964, memoryStr: '133.1 MB', memoryKB: 136308, listeningPorts: [], allPorts: [], primaryPort: Infinity, portsStr: '' },
+      { name: 'Unity.exe', pid: 28976, memoryStr: '0.96 GB', memoryKB: 1002752, listeningPorts: [3000], allPorts: [3000], primaryPort: 3000, portsStr: ':3000' }
     ],
     killProcess: async (pid) => `Mock killed process PID ${pid}`
   };
@@ -120,12 +121,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 3000);
   }
 
+  let isFetchingProcesses = false;
+  let searchDebounceTimer = null;
+
   // Load and refresh process list
-  async function loadProcesses(keepIndex = true) {
+  async function loadProcesses(keepIndex = true, silent = false) {
+    if (isFetchingProcesses) return;
+    isFetchingProcesses = true;
+
     adjustPluginHeight(580);
-    loadingState.style.display = 'flex';
-    emptyState.style.display = 'none';
-    processListEl.style.display = 'none';
+    if (!silent) {
+      loadingState.style.display = 'flex';
+      emptyState.style.display = 'none';
+      processListEl.style.display = 'none';
+    }
 
     try {
       allProcesses = await processService.getProcesses();
@@ -141,21 +150,44 @@ document.addEventListener('DOMContentLoaded', () => {
       applyFilterAndSort(keepIndex);
     } catch (err) {
       console.error('Failed to load processes:', err);
-      showToast('获取进程列表失败: ' + (err.message || '未知错误'), 'error');
+      if (!silent) {
+        showToast('获取进程列表失败: ' + (err.message || '未知错误'), 'error');
+      }
     } finally {
-      loadingState.style.display = 'none';
-      processListEl.style.display = 'block';
-      if (searchInput && !isModalOpen) {
+      isFetchingProcesses = false;
+      if (!silent) {
+        loadingState.style.display = 'none';
+        processListEl.style.display = 'block';
+      }
+      if (searchInput && !isModalOpen && document.activeElement !== searchInput) {
         searchInput.focus();
       }
     }
   }
+
+  // Window Focus & Plugin Enter Lifecycle Events for Auto-Refresh
+  window.onPluginEnter = function(action) {
+    loadProcesses(true, allProcesses.length > 0);
+  };
+
+  window.addEventListener('focus', () => {
+    if (!isModalOpen && !isFetchingProcesses) {
+      loadProcesses(true, true);
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && !isModalOpen && !isFetchingProcesses) {
+      loadProcesses(true, true);
+    }
+  });
 
   // Update header sort direction icons
   function updateHeaderSortIcons() {
     const headers = [
       { el: thName, field: 'name' },
       { el: thPID, field: 'pid' },
+      { el: thPort, field: 'primaryPort' },
       { el: thMem, field: 'memoryKB' }
     ];
 
@@ -209,18 +241,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Filter and Sort logic
   function applyFilterAndSort(keepIndex = false) {
-    const query = searchInput.value.trim().toLowerCase();
+    const rawQuery = searchInput.value.trim().toLowerCase();
     
     // Filter
-    if (!query) {
+    if (!rawQuery) {
       filteredProcesses = [...allProcesses];
       searchClear.style.display = 'none';
     } else {
       searchClear.style.display = 'flex';
+      
+      // Clean query for port matching (e.g. ":8080", "port:8080", "port=8080" -> "8080")
+      const cleanPortQuery = rawQuery.replace(/^port\s*[:=]?\s*/i, '').replace(/^[:]/, '').trim();
+
       filteredProcesses = allProcesses.filter(p => {
-        const nameMatch = p.name.toLowerCase().includes(query);
-        const pidMatch = p.pid.toString().includes(query);
-        return nameMatch || pidMatch;
+        const nameMatch = p.name.toLowerCase().includes(rawQuery);
+        const pidMatch = p.pid.toString().includes(rawQuery);
+        
+        let portMatch = false;
+        if (cleanPortQuery) {
+          const listeningPorts = p.listeningPorts || [];
+          const allPorts = p.allPorts || [];
+          const portsStr = p.portsStr || '';
+
+          const hasListeningMatch = listeningPorts.some(port => port.toString().includes(cleanPortQuery));
+          const hasAllMatch = allPorts.some(port => port.toString().includes(cleanPortQuery));
+          const hasStrMatch = portsStr.toLowerCase().includes(rawQuery) || portsStr.toLowerCase().includes(cleanPortQuery);
+
+          portMatch = hasListeningMatch || hasAllMatch || hasStrMatch;
+        }
+
+        return nameMatch || pidMatch || portMatch;
       });
     }
 
@@ -228,6 +278,9 @@ document.addEventListener('DOMContentLoaded', () => {
     filteredProcesses.sort((a, b) => {
       let valA = a[currentSort.field];
       let valB = b[currentSort.field];
+
+      if (valA === undefined || valA === null) valA = currentSort.field === 'primaryPort' ? Infinity : '';
+      if (valB === undefined || valB === null) valB = currentSort.field === 'primaryPort' ? Infinity : '';
 
       if (typeof valA === 'string') valA = valA.toLowerCase();
       if (typeof valB === 'string') valB = valB.toLowerCase();
@@ -251,6 +304,36 @@ document.addEventListener('DOMContentLoaded', () => {
     updateBatchKillState();
   }
 
+  // Render Port Badges Helper
+  function renderPortBadges(proc) {
+    const listening = proc.listeningPorts || [];
+    const all = proc.allPorts || [];
+    
+    if (listening.length > 0) {
+      const showPorts = listening.slice(0, 2);
+      const extraCount = listening.length - showPorts.length;
+      const fullTooltip = `监听端口: ${listening.map(p => ':' + p).join(', ')}`;
+
+      let html = showPorts.map(p => `<span class="port-badge" title="${fullTooltip}">:${p}</span>`).join(' ');
+      if (extraCount > 0) {
+        html += ` <span class="port-badge-more" title="${fullTooltip}">+${extraCount}</span>`;
+      }
+      return html;
+    } else if (all.length > 0) {
+      const showPorts = all.slice(0, 2);
+      const extraCount = all.length - showPorts.length;
+      const fullTooltip = `活跃连接端口: ${all.map(p => ':' + p).join(', ')}`;
+
+      let html = showPorts.map(p => `<span class="port-badge port-badge-active" title="${fullTooltip}">:${p}</span>`).join(' ');
+      if (extraCount > 0) {
+        html += ` <span class="port-badge-more" title="${fullTooltip}">+${extraCount}</span>`;
+      }
+      return html;
+    }
+    
+    return `<span class="no-port">-</span>`;
+  }
+
   // Render Process Items
   function renderList() {
     processListEl.innerHTML = '';
@@ -267,6 +350,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const isChecked = checkedPids.has(proc.pid);
       item.className = `process-item ${index === selectedIndex ? 'selected' : ''} ${isChecked ? 'checked-row' : ''}`;
       item.setAttribute('data-index', index);
+
+      const portHtml = renderPortBadges(proc);
 
       item.innerHTML = `
         <div class="checkbox-cell">
@@ -288,6 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <span>${escapeHtml(proc.name)}</span>
         </div>
         <div class="pid-cell">${proc.pid}</div>
+        <div class="port-cell">${portHtml}</div>
         <div class="mem-cell">${escapeHtml(proc.memoryStr)}</div>
         <div class="action-cell">
           <button type="button" class="btn-kill-row" data-action="kill" data-index="${index}">
@@ -436,6 +522,10 @@ document.addEventListener('DOMContentLoaded', () => {
         <span class="info-value">${proc.pid}</span>
       </div>
       <div class="info-row">
+        <span class="info-label">占用端口:</span>
+        <span class="info-value" style="color: var(--accent-green); font-family: var(--font-mono);">${escapeHtml(proc.portsStr || '无')}</span>
+      </div>
+      <div class="info-row">
         <span class="info-label">内存占用:</span>
         <span class="info-value">${escapeHtml(proc.memoryStr)}</span>
       </div>
@@ -459,7 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     let html = selectedProcs.map(p => `
       <div class="modal-proc-tag">
-        <span><strong>${escapeHtml(p.name)}</strong> (PID: ${p.pid})</span>
+        <span><strong>${escapeHtml(p.name)}</strong> (PID: ${p.pid}${p.portsStr ? ' | ' + escapeHtml(p.portsStr) : ''})</span>
         <span style="color: #38bdf8; font-family: var(--font-mono); font-size: 11px;">${p.memoryStr}</span>
       </div>
     `).join('');
@@ -647,12 +737,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Search Input Event
   searchInput.addEventListener('input', () => {
+    // 1. Instantly filter existing cached processes for fast response
     applyFilterAndSort(false);
+
+    // 2. Debounce (300ms) background refresh from OS to catch newly launched processes/ports
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      loadProcesses(true, true);
+    }, 300);
   });
 
   searchClear.addEventListener('click', () => {
     searchInput.value = '';
     applyFilterAndSort(false);
+    loadProcesses(true, true);
     searchInput.focus();
   });
 
@@ -674,6 +772,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   thName.addEventListener('click', () => toggleSort('name', false));
   thPID.addEventListener('click', () => toggleSort('pid', false));
+  if (thPort) thPort.addEventListener('click', () => toggleSort('primaryPort', false));
   thMem.addEventListener('click', () => toggleSort('memoryKB', true));
 
   // Modal Mouse Click Handlers
