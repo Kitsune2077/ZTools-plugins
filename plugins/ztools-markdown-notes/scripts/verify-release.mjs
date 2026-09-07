@@ -5,6 +5,7 @@ const manifest = JSON.parse(await fs.readFile(new URL('plugin.json', dist), 'utf
 
 if (manifest.main !== 'index.html') throw new Error('生产清单入口必须是 index.html')
 if (/^https?:\/\//i.test(manifest.main)) throw new Error('生产清单不能使用网络入口')
+if (manifest.development) throw new Error('生产清单不能保留开发服务器入口')
 
 const requiredFiles = [
   manifest.main,
