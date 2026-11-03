@@ -13,6 +13,9 @@
   --q3: #e0a73a;
   --q4: #d4685a;
   --qna: #9aa0b0;
+  --ccf-a: #6d28d9;
+  --ccf-b: #1e88ff;
+  --ccf-c: #8a90a2;
 }
 
 * { box-sizing: border-box; }
@@ -67,11 +70,35 @@ html, body {
 }
 
 /* ---------------- 首页 ---------------- */
-.home__sub {
+.home__intro {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   margin: 14px 2px 12px;
+}
+.home__sub {
+  margin: 0;
   color: var(--muted);
   font-size: 12.5px;
 }
+.home__intro .project-star { margin-left: auto; }
+.project-star {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.project-star:hover { border-color: var(--brand); color: var(--brand); }
+.project-star:focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; }
 
 .grid {
   display: grid;
@@ -207,9 +234,17 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 4px;
+  gap: 5px;
   flex-shrink: 0;                  /* 不被压缩 */
   margin-left: auto;               /* 始终靠右 */
+}
+
+.badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  flex-wrap: wrap;
 }
 
 .badge {
@@ -234,6 +269,22 @@ html, body {
 .badge--q3 { background: rgba(224,167,58,0.14); color: var(--q3); }
 .badge--q4 { background: rgba(212,104,90,0.14); color: var(--q4); }
 .badge--qna { background: #eef0f4; color: var(--qna); }
+
+/* CCF 等级徽标：用紫/蓝/灰三档，与 Q 分区在色系上区分开 */
+.badge--ccf-a { background: rgba(109,40,217,0.12); color: var(--ccf-a); }
+.badge--ccf-b { background: rgba(30,136,255,0.12); color: var(--ccf-b); }
+.badge--ccf-c { background: #eef0f4; color: var(--ccf-c); }
+/* CCF 领域 / 变动备注：弱化，避免抢焦点 */
+.badge--cat {
+  background: var(--teal-soft);
+  color: var(--teal);
+  font-weight: 500;
+}
+.badge--note {
+  background: rgba(224,167,58,0.16);
+  color: #a6791b;
+  font-weight: 500;
+}
 
 .card__meta {
   margin-top: 6px;
@@ -279,12 +330,46 @@ html, body {
   color: var(--muted);
 }
 
+.card__ccf {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--teal);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
 .card__cat {
   margin-top: 8px;
   font-size: 11.5px;
   color: var(--muted);
   line-height: 1.5;
   word-break: break-word;
+}
+
+/* ---------------- 类型筛选条 ---------------- */
+.chips {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+
+.chip:hover { border-color: #cfd6e4; }
+
+.chip.is-on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
 }
 
 .card__actions { margin-top: 10px; display: flex; gap: 8px; }
@@ -450,3 +535,5 @@ code {
 }
 .mol-form input:focus { border-color: var(--brand); }
 .mol-form .mol-full { grid-column: 1 / -1; }
+
+.app-release-notes summary{cursor:pointer;font-weight:600;color:#3d6674}.app-release-notes ul{padding-left:20px;color:#63798a;font-size:13px;line-height:1.9}.app-release-notes li+li{margin-top:7px}

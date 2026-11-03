@@ -1,3 +1,6 @@
+import type { ApplicationCatalogResult } from "../preload/application-catalog";
+import type { ListReorderRequest } from "./list-order";
+import type { HistoryPage, HistoryRequest } from "../preload/history-page";
 /// <reference types="vite/client" />
 
 import type {
@@ -16,17 +19,43 @@ import type { PasteStackState } from "@pasteboard-pro/core";
 declare global {
   interface Window {
     pasteboardPro?: Readonly<{
+      getHostCompatibility(): {
+        currentVersion?: string;
+        minimumVersion: string;
+        supported: boolean;
+        supportsPluginData: boolean;
+        supportsNativeFileDrag: boolean;
+        supportsScreenCapture: boolean;
+      };
+      listApplications?(refresh?: boolean): Promise<ApplicationCatalogResult>;
+      getSourceAppIcon?(sourceApp: {
+        name?: string;
+        bundleId?: string;
+      }): Promise<string | undefined>;
       getPlatformCapabilities(): {
         platform: NodeJS.Platform;
         supportsGlobalPasteQueue: boolean;
         supportsQuickLook: boolean;
         supportsSystemOcr: boolean;
         supportsImageRotation: boolean;
+        supportsNativeFileDrag: boolean;
+        supportsScreenCapture: boolean;
       };
+      captureScreenshot(): Promise<{
+        bounds?: {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        };
+      }>;
       searchHistory(
         query?: string,
         limit?: number,
       ): Promise<Readonly<{ items: unknown[]; total: number }>>;
+      searchHistoryPage?(request: HistoryRequest): Promise<HistoryPage>;
+      getHistoryItem?(itemId: string, fingerprint?: string): Promise<unknown>;
+      reorderHistory?(request: ListReorderRequest, pinboardId?: string): Promise<ListOrders>;
       getPrivacySettings(): Promise<PrivacySettings>;
       savePrivacySettings(settings: PrivacySettings): Promise<PrivacySettings>;
       setCapturePause(pause: CapturePauseState): Promise<PrivacySettings>;
@@ -60,6 +89,8 @@ declare global {
         itemId: string;
         mediaType: string;
         dataBase64: string;
+        originalWidth?: number | undefined;
+        originalHeight?: number | undefined;
       }>>;
       prepareNativeFileDrag(itemId: string): Promise<boolean>;
       startNativeFileDrag(itemId: string): boolean;
@@ -78,7 +109,7 @@ declare global {
       getPasteStack(): Promise<PasteStackState>;
       savePasteStack(state: PasteStackState): Promise<PasteStackState>;
       openPanel(
-        panel: "privacy" | "sync" | "preview" | "editor",
+        panel: "privacy" | "sync" | "preview" | "editor" | "whatsnew",
         params?: Readonly<Record<string, string>>,
       ): void;
     }>;

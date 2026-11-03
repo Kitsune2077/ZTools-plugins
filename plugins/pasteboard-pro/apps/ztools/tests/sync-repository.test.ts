@@ -1,6 +1,16 @@
-import { mkdtemp, readFile, rm, stat, utimes } from "node:fs/promises";
-import os from "node:os";
+import { createHash } from "node:crypto";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
@@ -12,6 +22,15 @@ import {
   type ZToolsDocumentDatabase,
 } from "../preload/clipboard-store";
 import { ZToolsSyncEntityRepository } from "../preload/sync-repository";
+
+const TEST_ARTIFACTS_ROOT = fileURLToPath(
+  new URL("../../../artifacts/v026-blob-tests", import.meta.url),
+);
+
+async function tempRoot(prefix: string): Promise<string> {
+  await mkdir(TEST_ARTIFACTS_ROOT, { recursive: true });
+  return mkdtemp(path.join(TEST_ARTIFACTS_ROOT, `${prefix}-`));
+}
 
 function database(): ZToolsDocumentDatabase {
   const documents = new Map<string, Record<string, unknown>>();
@@ -28,7 +47,7 @@ function database(): ZToolsDocumentDatabase {
         ...structuredClone(document),
         _rev: `${revision}-test`,
       });
-      return { ok: true };
+      return { ok: true, id: String(document._id), rev: `${revision}-test` };
     },
     async remove(value) {
       if (typeof value !== "object" || value === null || !("_id" in value)) {
@@ -49,9 +68,22 @@ function database(): ZToolsDocumentDatabase {
   };
 }
 
+async function writeManagedBlob(
+  root: string,
+  bytes: Uint8Array,
+  extension = "png",
+): Promise<string> {
+  const digest = createHash("sha256").update(bytes).digest("hex");
+  const directory = path.join(root, digest.slice(0, 2));
+  const file = path.join(directory, `${digest}.${extension}`);
+  await mkdir(directory, { recursive: true });
+  await writeFile(file, bytes);
+  return file;
+}
+
 describe("ZTools sync entity repository", () => {
   it("stores derived image bytes in the content-addressed blob directory", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "pasteboard-pro-derived-"));
+    const root = await tempRoot("derived");
     try {
       const repository = new ZToolsSyncEntityRepository(database(), "host-a", root);
       const stored = await repository.storeLocalBlob(
@@ -74,8 +106,9 @@ describe("ZTools sync entity repository", () => {
   });
 
   it("deletes only files inside the plugin-managed blob directory", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "pasteboard-pro-delete-"));
-    const outside = path.join(os.tmpdir(), `pasteboard-pro-outside-${Date.now()}.png`);
+    const fixtureRoot = await tempRoot("delete");
+    const root = path.join(fixtureRoot, "blobs");
+    const outside = path.join(fixtureRoot, "outside.png");
     try {
       const repository = new ZToolsSyncEntityRepository(database(), "host-a", root);
       const stored = await repository.storeLocalBlob(new Uint8Array([9, 8, 7]), "image/png");
@@ -85,6 +118,165 @@ describe("ZTools sync entity repository", () => {
       await expect(
         repository.deleteLocalBlob({ blobId: "blob-outside", filePath: outside }),
       ).rejects.toThrow(/outside/i);
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects managed roots, invalid blob ids, and symlink escape paths", async () => {
+    const fixtureRoot = await tempRoot("safe-delete");
+    const root = path.join(fixtureRoot, "blobs");
+    const outsideRoot = path.join(fixtureRoot, "outside");
+    const outsideFile = path.join(outsideRoot, "outside.png");
+    const targetLink = path.join(root, "target-link.png");
+    const parentLink = path.join(root, "parent-link");
+    try {
+      await mkdir(root, { recursive: true });
+      await mkdir(outsideRoot, { recursive: true });
+      await writeFile(outsideFile, Buffer.from([1, 2, 3]));
+      await symlink(outsideFile, targetLink);
+      await symlink(outsideRoot, parentLink, "dir");
+      const repository = new ZToolsSyncEntityRepository(database(), "host-a", root);
+
+      await expect(
+        repository.deleteLocalBlob({ blobId: "blob-target", filePath: targetLink }),
+      ).rejects.toThrow(/symbolic link/i);
+      await expect(
+        repository.deleteLocalBlob({
+          blobId: "blob-parent",
+          filePath: path.join(parentLink, "outside.png"),
+        }),
+      ).rejects.toThrow(/symbolic link/i);
+      await expect(
+        repository.deleteLocalBlob({ blobId: "blob-root", filePath: root }),
+      ).rejects.toThrow(/outside/i);
+      await expect(
+        repository.deleteLocalBlob({ blobId: "blob\0invalid", filePath: targetLink }),
+      ).rejects.toThrow(/NUL/i);
+      await expect(
+        repository.deleteLocalBlob({ blobId: "../blob-invalid", filePath: targetLink }),
+      ).rejects.toThrow(/safe object identifier/i);
+      expect(await readFile(outsideFile)).toEqual(Buffer.from([1, 2, 3]));
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a symbolic-link managed root", async () => {
+    const fixtureRoot = await tempRoot("link-root");
+    const realRoot = path.join(fixtureRoot, "real");
+    const linkParent = path.join(fixtureRoot, "link-parent");
+    const linkedRoot = path.join(linkParent, "blobs");
+    const file = path.join(realRoot, "blob.png");
+    try {
+      await mkdir(realRoot, { recursive: true });
+      await mkdir(linkParent, { recursive: true });
+      await writeFile(file, Buffer.from([7, 8, 9]));
+      await symlink(realRoot, linkedRoot, "dir");
+      const repository = new ZToolsSyncEntityRepository(
+        database(),
+        "host-a",
+        linkedRoot,
+      );
+
+      await expect(
+        repository.deleteLocalBlob({
+          blobId: "blob-root-link",
+          filePath: path.join(linkedRoot, "blob.png"),
+        }),
+      ).rejects.toThrow(/symbolic-link blob root/i);
+      expect(await readFile(file)).toEqual(Buffer.from([7, 8, 9]));
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps legacy blob records removable after new writes move to pluginData", async () => {
+    const fixtureRoot = await tempRoot("legacy");
+    const currentRoot = path.join(fixtureRoot, "current");
+    const legacyRoot = path.join(fixtureRoot, "legacy");
+    try {
+      const legacyFile = await writeManagedBlob(
+        legacyRoot,
+        new Uint8Array([4, 5, 6]),
+      );
+      const repository = new ZToolsSyncEntityRepository(
+        database(),
+        "host-a",
+        currentRoot,
+        [legacyRoot],
+      );
+      const current = await repository.storeLocalBlob(
+        new Uint8Array([1, 2, 3]),
+        "image/png",
+      );
+
+      expect(current.imagePath.startsWith(currentRoot)).toBe(true);
+      await repository.deleteLocalBlob({ blobId: "blob-legacy", filePath: legacyFile });
+      await expect(stat(legacyFile)).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a content-addressed path whose bytes do not match its digest", async () => {
+    const root = await tempRoot("digest-delete");
+    try {
+      const claimedBytes = new Uint8Array([1, 1, 1]);
+      const digest = createHash("sha256").update(claimedBytes).digest("hex");
+      const directory = path.join(root, digest.slice(0, 2));
+      const file = path.join(directory, `${digest}.png`);
+      await mkdir(directory, { recursive: true });
+      await writeFile(file, new Uint8Array([9, 9, 9]));
+      const repository = new ZToolsSyncEntityRepository(database(), "host-a", root);
+
+      await expect(
+        repository.deleteLocalBlob({ blobId: "blob-mismatch", filePath: file }),
+      ).rejects.toThrow(/content does not match/i);
+      expect(await readFile(file)).toEqual(Buffer.from([9, 9, 9]));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps a verified blob while another database record still references it", async () => {
+    const root = await tempRoot("referenced-delete");
+    try {
+      const db = database();
+      const repository = new ZToolsSyncEntityRepository(db, "host-a", root);
+      const stored = await repository.storeLocalBlob(
+        new Uint8Array([3, 1, 4, 1, 5]),
+        "image/png",
+      );
+      const fixture = historyFixture.find((item) => item.kind === "image");
+      if (fixture === undefined) throw new Error("Image fixture is required");
+      const item = PasteItemSchema.parse({
+        ...fixture,
+        payload: {
+          ...fixture.payload,
+          blobId: stored.id,
+          mediaType: "image/png",
+        },
+      });
+      const store = new ZToolsCanonicalClipboardStore(db, { deviceId: "host-a" });
+      await store.put({
+        item,
+        origin: {
+          host: "sync",
+          remoteAvailable: true,
+          imagePath: stored.imagePath,
+          blobBytes: stored.blobBytes,
+          pluginBlobId: stored.id,
+        },
+      });
+
+      await repository.deleteLocalBlob({
+        blobId: stored.id,
+        filePath: stored.imagePath,
+      });
+      expect(await readFile(stored.imagePath)).toEqual(
+        Buffer.from([3, 1, 4, 1, 5]),
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

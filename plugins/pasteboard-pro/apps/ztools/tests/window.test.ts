@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildPanelWindowOptions,
@@ -9,6 +9,8 @@ import {
   type BrowserWindowHandle,
   type ShelfWindowHost,
 } from "../preload/window";
+
+import { waitForWindowReadyScript } from "../window-ready";
 
 const primaryDisplay = {
   id: "primary",
@@ -40,6 +42,21 @@ describe("ZTools shelf window geometry", () => {
       x: 370,
       y: 132,
       width: 700,
+      height: 660,
+      transparent: false,
+      backgroundColor: "#F7F7FB",
+      frame: false,
+      hasShadow: true,
+      alwaysOnTop: true,
+      webPreferences: { preload: "preload.js" },
+    });
+  });
+
+  it("centers whatsnew panel in the visible work area", () => {
+    expect(buildPanelWindowOptions(primaryDisplay, "whatsnew")).toMatchObject({
+      x: 440,
+      y: 132,
+      width: 560,
       height: 660,
       transparent: false,
       backgroundColor: "#F7F7FB",
@@ -224,7 +241,7 @@ describe("ZTools shelf lifecycle", () => {
     expect(closed).toBe(1);
   });
 
-  it("creates one shelf, applies content protection, and repositions it across displays", () => {
+  it("creates one shelf, applies content protection, and repositions it across displays", async () => {
     const calls: string[] = [];
     let readyCallback: (() => void) | undefined;
     const windowHandle: BrowserWindowHandle = {
@@ -262,6 +279,7 @@ describe("ZTools shelf lifecycle", () => {
         contentProtection: true,
       }),
     ).toBe(windowHandle);
+    await vi.waitFor(() => expect(calls).toContain("show"));
     expect(
       manager.open(
         {
@@ -280,9 +298,9 @@ describe("ZTools shelf lifecycle", () => {
     expect(calls).toContain("protect:true");
     expect(calls).toContain("bounds:0,620,1440,280");
     expect(calls).toContain("bounds:-1920,800,1920,280");
-    expect(calls).toContain("script:window.location.reload()");
+    expect(calls).toContain(`script:${waitForWindowReadyScript}`);
     expect(calls).toContain("hide:false");
-    expect(calls.slice(-2)).toEqual(["show", "focus"]);
+    expect(calls.slice(-3)).toEqual(["show", "focus", "bounds:-1920,800,1920,280"]);
     manager.setContentProtection(false);
     expect(calls.at(-1)).toBe("protect:false");
   });
@@ -323,7 +341,7 @@ describe("ZTools shelf lifecycle", () => {
 });
 
 describe("ZTools settings panel lifecycle", () => {
-  it("centers, reloads, reuses, and replaces independent panels", () => {
+  it("centers, waits for content, reuses, and replaces independent panels", async () => {
     const calls: string[] = [];
     let activeReady: (() => void) | undefined;
     const handles: BrowserWindowHandle[] = [];
@@ -360,6 +378,7 @@ describe("ZTools settings panel lifecycle", () => {
     const manager = new PanelWindowManager(host);
 
     expect(manager.open(primaryDisplay, { panel: "privacy" })).toBe(handles[0]);
+    await vi.waitFor(() => expect(calls).toContain("show"));
     expect(manager.open(primaryDisplay, { panel: "privacy" })).toBe(handles[0]);
     expect(manager.open(primaryDisplay, { panel: "sync" })).toBe(handles[1]);
 
@@ -367,7 +386,43 @@ describe("ZTools settings panel lifecycle", () => {
       "create:index.html?panel=privacy&display=primary",
       "create:index.html?panel=sync&display=primary",
     ]);
-    expect(calls).toContain("script:window.location.reload()");
+    expect(calls).toContain(`script:${waitForWindowReadyScript}`);
     expect(calls).toContain("close");
+  });
+});
+
+describe("clear result delivery to owned child windows", () => {
+  it("addresses shelf and panel handles and contains failures when a window closes", async () => {
+    vi.useFakeTimers();
+    try {
+      for (const role of ["shelf", "panel"] as const) {
+        const scripts: string[] = [];
+        let failReply = false;
+        let destroyed = false;
+        const handle: BrowserWindowHandle = {
+          isDestroyed: () => destroyed,
+          webContents: { async executeJavaScript(script) {
+            scripts.push(script);
+            if (failReply && script.includes("clear-history-result")) throw new Error("closed child fixture");
+          } },
+          show() {}, focus() {}, setBounds() {}, close() {}, setContentProtection() {},
+        };
+        const host: ShelfWindowHost = { createBrowserWindow: () => handle, hideMainWindow() {} };
+        const manager = role === "shelf" ? new ShelfWindowManager(host) : new PanelWindowManager(host);
+        if (manager instanceof ShelfWindowManager) manager.open(primaryDisplay, { edge: "bottom", contentProtection: false });
+        else manager.open(primaryDisplay, { panel: "privacy" });
+        const reply = { id: "clear:1", result: { deleted: 2, failed: 0, blobFailures: 0 } };
+        manager.notifyClearHistoryResult(reply);
+        expect(scripts.at(-1)).toContain("pasteboard-pro:clear-history-result");
+        expect(scripts.at(-1)).toContain('"deleted":2');
+        failReply = true;
+        manager.notifyClearHistoryResult(reply);
+        await Promise.resolve();
+        destroyed = true;
+        const count = scripts.length;
+        manager.notifyClearHistoryResult(reply);
+        expect(scripts).toHaveLength(count);
+      }
+    } finally { vi.clearAllTimers(); vi.useRealTimers(); }
   });
 });

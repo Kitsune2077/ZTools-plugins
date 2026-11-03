@@ -1,3 +1,7 @@
+import { builtInThemeIds, isPlainRecord, normalizeCustomThemes, normalizeHexColor, resolveTheme, type ColorTheme } from './themes'
+
+export { normalizeHexColor } from './themes'
+
 const LAST_WORKSPACE_KEY = 'last-workspace-path'
 const EDITOR_MODE_KEY = 'editor-mode'
 const PINNED_NOTES_KEY = 'pinned-notes'
@@ -9,9 +13,21 @@ const GLOBAL_NOTE_SEARCH_KEY = 'global-note-search-enabled'
 const GLOBAL_WORKSPACE_SEARCH_KEY = 'global-workspace-search-enabled'
 const HIDDEN_GLOBAL_NOTES_KEY = 'hidden-global-notes'
 
-export type EditorSettings = { fontSize: number; lineHeight: number; findHighlightColor: string }
+export type EditorSettings = {
+  themeId: string
+  customThemes: ColorTheme[]
+  fontSize: number
+  lineHeight: number
+  textHighlightOpacity: number
+}
 export type RegisteredWorkspace = { id: string; name: string; path: string }
-export const defaultEditorSettings: EditorSettings = { fontSize: 16, lineHeight: 1.4, findHighlightColor: '#facc15' }
+export const defaultEditorSettings: EditorSettings = {
+  themeId: 'blue',
+  customThemes: [],
+  fontSize: 16,
+  lineHeight: 1.4,
+  textHighlightOpacity: 45,
+}
 export type NoteDraft = {
   workspaceId: string
   relativePath: string
@@ -96,21 +112,51 @@ export function saveHiddenGlobalNotePaths(workspaceId: string, paths: string[]) 
   window.ztools.dbStorage.setItem(`${HIDDEN_GLOBAL_NOTES_KEY}:${workspaceId}`, [...new Set(paths)])
 }
 
-export function loadEditorSettings(): EditorSettings {
-  const value = window.ztools.dbStorage.getItem(EDITOR_SETTINGS_KEY) as Partial<EditorSettings> | null
+function normalizeEditorSettings(stored: unknown, systemDark: boolean, migrateLegacy: boolean): EditorSettings {
+  const value = isPlainRecord(stored) ? stored : {}
+  const customThemes = normalizeCustomThemes(value.customThemes)
+  let themeId = typeof value.themeId === 'string' ? value.themeId : defaultEditorSettings.themeId
+  if (migrateLegacy && !Object.hasOwn(value, 'themeId')) {
+    themeId = value.backgroundTheme === 'black' || value.backgroundTheme === 'white' ? value.backgroundTheme : 'blue'
+    const legacyTheme = resolveTheme(themeId, [], systemDark)
+    const findColor = normalizeHexColor(value.findHighlightColor) ?? legacyTheme.colors.findHighlightColor
+    const textColor = normalizeHexColor(value.textHighlightColor) ?? legacyTheme.colors.textHighlightColor
+    if (findColor !== legacyTheme.colors.findHighlightColor || textColor !== legacyTheme.colors.textHighlightColor) {
+      legacyTheme.id = 'custom:legacy'
+      legacyTheme.name = '原有配色'
+      legacyTheme.colors.findHighlightColor = findColor
+      legacyTheme.colors.textHighlightColor = textColor
+      const existingIndex = customThemes.findIndex((theme) => theme.id === legacyTheme.id)
+      if (existingIndex >= 0) customThemes[existingIndex] = legacyTheme
+      else customThemes.push(legacyTheme)
+      themeId = legacyTheme.id
+    }
+  }
+  if (!builtInThemeIds.some((id) => id === themeId) && !customThemes.some((theme) => theme.id === themeId)) themeId = 'blue'
   return {
+    themeId,
+    customThemes,
     fontSize: typeof value?.fontSize === 'number' && value.fontSize >= 12 && value.fontSize <= 24 ? value.fontSize : defaultEditorSettings.fontSize,
     lineHeight: typeof value?.lineHeight === 'number' && value.lineHeight >= 1.2 && value.lineHeight <= 2.4 ? value.lineHeight : defaultEditorSettings.lineHeight,
-    findHighlightColor: typeof value?.findHighlightColor === 'string' && /^#[0-9a-f]{6}$/i.test(value.findHighlightColor) ? value.findHighlightColor : defaultEditorSettings.findHighlightColor,
+    textHighlightOpacity: isHighlightOpacity(value?.textHighlightOpacity) ? value.textHighlightOpacity : defaultEditorSettings.textHighlightOpacity,
   }
 }
 
+export function loadEditorSettings(systemDark = false): EditorSettings {
+  const stored = window.ztools.dbStorage.getItem(EDITOR_SETTINGS_KEY)
+  const settings = normalizeEditorSettings(stored, systemDark, true)
+  if (isPlainRecord(stored) && !Object.hasOwn(stored, 'themeId') && settings.themeId === 'custom:legacy') {
+    saveEditorSettings(settings)
+  }
+  return settings
+}
+
 export function saveEditorSettings(settings: EditorSettings) {
-  window.ztools.dbStorage.setItem(EDITOR_SETTINGS_KEY, {
-    fontSize: settings.fontSize,
-    lineHeight: settings.lineHeight,
-    findHighlightColor: settings.findHighlightColor,
-  })
+  window.ztools.dbStorage.setItem(EDITOR_SETTINGS_KEY, normalizeEditorSettings(settings, false, false))
+}
+
+function isHighlightOpacity(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 100
 }
 
 export function loadTrashRetentionDays(): number | null {

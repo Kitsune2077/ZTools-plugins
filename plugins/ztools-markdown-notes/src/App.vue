@@ -5,12 +5,17 @@ import ImagePreview from './components/ImagePreview.vue'
 import MarkdownEditor from './components/MarkdownEditor.vue'
 import OutlinePanel from './components/OutlinePanel.vue'
 import TrashPanel from './components/TrashPanel.vue'
+import ThemeSettings from './components/ThemeSettings.vue'
 import WorkspaceTree from './components/WorkspaceTree.vue'
 import { extractOutline } from './outline'
+import { isDarkColor, resolveTheme, type ColorTheme } from './themes'
 import { endWorkspaceDrag, getWorkspaceDragPath } from './workspaceDrag'
-import { clearNoteDraft, clearNoteDraftPath, defaultEditorSettings, loadEditorMode, loadEditorSettings, loadGlobalNoteSearchEnabled, loadGlobalWorkspaceSearchEnabled, loadHiddenGlobalNotePaths, loadLastWorkspacePath, loadNoteDraft, loadPinnedNotePaths, loadRegisteredWorkspaces, loadTrashRetentionDays, replaceNoteDraftPath, saveEditorMode, saveEditorSettings, saveGlobalNoteSearchEnabled, saveGlobalWorkspaceSearchEnabled, saveHiddenGlobalNotePaths, saveLastWorkspacePath, saveNoteDraft, savePinnedNotePaths, saveRegisteredWorkspaces, saveTrashRetentionDays, type NoteDraft, type RegisteredWorkspace } from './workspaceSession'
+import { reorderWorkspaceEntry, replaceWorkspaceOrderPath, sortWorkspaceEntries } from './workspaceOrder'
+import { clearNoteDraft, clearNoteDraftPath, defaultEditorSettings, loadEditorMode, loadEditorSettings, loadGlobalNoteSearchEnabled, loadGlobalWorkspaceSearchEnabled, loadHiddenGlobalNotePaths, loadLastWorkspacePath, loadNoteDraft, loadPinnedNotePaths, loadRegisteredWorkspaces, loadTrashRetentionDays, replaceNoteDraftPath, saveEditorMode, saveEditorSettings, saveGlobalNoteSearchEnabled, saveGlobalWorkspaceSearchEnabled, saveHiddenGlobalNotePaths, saveLastWorkspacePath, saveNoteDraft, savePinnedNotePaths, saveRegisteredWorkspaces, saveTrashRetentionDays, type EditorSettings, type NoteDraft, type RegisteredWorkspace } from './workspaceSession'
 
 const workspace = ref<WorkspaceScan | null>(null)
+const orderedTreeEntries = ref<WorkspaceTreeEntry[]>([])
+const treeOrderError = ref('')
 const previousWorkspace = ref<WorkspaceScan | null>(null)
 const workspaceName = ref('我的笔记')
 const selectedPath = ref('')
@@ -48,6 +53,8 @@ const operationMessage = ref('')
 const pendingDelete = ref<WorkspaceTreeEntry | null>(null)
 const isRefreshing = ref(false)
 const isCreateMenuOpen = ref(false)
+const isEditorMenuOpen = ref(false)
+const markdownImportInput = ref<HTMLInputElement | null>(null)
 const editorMode = ref<'ir' | 'sv'>('ir')
 const operationTone = ref<'error' | 'success'>('error')
 const previewImage = ref<{ src: string; alt: string } | null>(null)
@@ -90,7 +97,46 @@ const hiddenGlobalNotePaths = ref<string[]>([])
 const isRootDropActive = ref(false)
 const isSettingsOpen = ref(false)
 const isResetSettingsOpen = ref(false)
-const editorSettings = ref({ ...defaultEditorSettings })
+const editorSettings = ref<EditorSettings>({ ...defaultEditorSettings, customThemes: [] })
+const themeSettingsPanel = ref<InstanceType<typeof ThemeSettings> | null>(null)
+const themePreview = ref<ColorTheme | null>(null)
+const systemDarkTheme = window.matchMedia('(prefers-color-scheme: dark)')
+const isSystemDark = ref(systemDarkTheme.matches)
+const activeTheme = computed(() => resolveTheme(editorSettings.value.themeId, editorSettings.value.customThemes, isSystemDark.value))
+const displayedTheme = computed(() => themePreview.value ?? activeTheme.value)
+const isDarkTheme = computed(() => isDarkColor(displayedTheme.value.colors.editorBackground))
+const themeCssVariables = computed(() => {
+  const colors = displayedTheme.value.colors
+  return {
+    '--navigation-background': colors.navigationBackground,
+    '--navigation-text': colors.navigationText,
+    '--navigation-color-scheme': isDarkColor(colors.navigationBackground) ? 'dark' : 'light',
+    '--editor-background': colors.editorBackground,
+    '--editor-text': colors.editorText,
+    '--editor-toolbar-background': colors.editorToolbarBackground,
+    '--popup-background': colors.popupBackground,
+    '--popup-text': colors.popupText,
+    '--popup-color-scheme': isDarkColor(colors.popupBackground) ? 'dark' : 'light',
+    '--accent-color': colors.accentColor,
+    '--accent-text': isDarkColor(colors.accentColor) ? '#FFFFFF' : '#172033',
+    '--theme-border-color': colors.borderColor,
+    '--find-highlight-color': colors.findHighlightColor,
+    '--find-highlight-text': isDarkColor(colors.findHighlightColor) ? '#FFFFFF' : '#172033',
+    '--text-highlight-color': colors.textHighlightColor,
+    '--text-highlight-opacity': `${editorSettings.value.textHighlightOpacity}%`,
+  }
+})
+
+function updateSystemTheme(event: MediaQueryListEvent) {
+  isSystemDark.value = event.matches
+}
+
+watch(themeCssVariables, (variables) => {
+  document.documentElement.dataset.backgroundTheme = displayedTheme.value.id
+  document.documentElement.dataset.customTheme = displayedTheme.value.id.startsWith('custom:') ? 'true' : 'false'
+  document.documentElement.dataset.colorScheme = isDarkTheme.value ? 'dark' : 'light'
+  Object.entries(variables).forEach(([name, value]) => document.documentElement.style.setProperty(name, value))
+}, { immediate: true, flush: 'sync' })
 const saveConflict = ref<{
   notePath: string
   diskContent: string
@@ -141,7 +187,7 @@ const workspaceChoices = computed<RegisteredWorkspace[]>(() => {
 const editorStyle = computed(() => ({
   '--editor-font-size': `${editorSettings.value.fontSize}px`,
   '--editor-line-height': String(editorSettings.value.lineHeight),
-  '--find-highlight-color': editorSettings.value.findHighlightColor,
+  '--text-highlight-opacity': `${editorSettings.value.textHighlightOpacity}%`,
 }))
 const pinnedNotes = computed(() => {
   const notes = new Map(flattenNoteEntries(workspace.value?.entries ?? []).map((note) => [note.relativePath, note]))
@@ -331,6 +377,40 @@ function toggleGlobalWorkspaceSearchEnabled() {
   void syncGlobalNoteFeatures()
 }
 
+function reloadTreeOrder() {
+  const current = workspace.value
+  if (!current) {
+    orderedTreeEntries.value = []
+    return
+  }
+  try {
+    orderedTreeEntries.value = sortWorkspaceEntries(current.workspace.id, current.entries)
+  } catch (error) {
+    orderedTreeEntries.value = current.entries
+    treeOrderError.value = `读取排序失败，已使用默认顺序：${error instanceof Error ? error.message : '未知错误'}`
+  }
+}
+
+function reorderEntry(sourcePath: string, targetPath: string, position: 'before' | 'after') {
+  if (!workspace.value) return
+  try {
+    if (reorderWorkspaceEntry(workspace.value.workspace.id, workspace.value.entries, sourcePath, targetPath, position)) {
+      reloadTreeOrder()
+    }
+  } catch (error) {
+    treeOrderError.value = `保存排序失败：${error instanceof Error ? error.message : '未知错误'}`
+  }
+}
+
+function replaceTreeOrderPath(oldPath: string, newPath: string) {
+  if (!workspace.value) return
+  try {
+    replaceWorkspaceOrderPath(workspace.value.workspace.id, workspace.value.entries, oldPath, newPath)
+  } catch (error) {
+    treeOrderError.value = `文件操作已完成，但更新排序失败：${error instanceof Error ? error.message : '未知错误'}`
+  }
+}
+
 function replacePinnedPath(oldPath: string, newPath: string) {
   const oldPrefix = `${oldPath}/`
   const nextPaths = pinnedNotePaths.value.map((path) => {
@@ -381,6 +461,7 @@ async function moveEntry(sourcePath: string, targetDirectoryPath: string) {
     }
     const root = workspace.value.workspace.path
     const newPath = await window.znotes.moveEntry(root, sourcePath, targetDirectoryPath)
+    replaceTreeOrderPath(sourcePath, newPath)
     replacePinnedPath(sourcePath, newPath)
     replaceHiddenGlobalPath(sourcePath, newPath)
     const movedOpenNotePath = activeNotePath.value === sourcePath
@@ -426,10 +507,15 @@ function dropIntoRoot(event: DragEvent) {
   if (allowed) void moveEntry(sourcePath, '')
 }
 
-function showOperationError(message: string) {
+function showOperationError(message: string, autoDismiss = false) {
   window.clearTimeout(operationTimer)
   operationTone.value = 'error'
   operationMessage.value = message
+  if (autoDismiss) {
+    operationTimer = window.setTimeout(() => {
+      operationMessage.value = ''
+    }, 2200)
+  }
 }
 
 function showOperationSuccess(message: string) {
@@ -442,6 +528,8 @@ function showOperationSuccess(message: string) {
 }
 
 function closeTransientUi() {
+  themeSettingsPanel.value?.cancelPreview()
+  themePreview.value = null
   window.clearTimeout(operationTimer)
   operationMessage.value = ''
   pendingDelete.value = null
@@ -465,18 +553,48 @@ function closeTransientUi() {
   isExpiredTrashOpen.value = false
   openEntryMenuPath.value = null
   isCreateMenuOpen.value = false
+  isEditorMenuOpen.value = false
   isRootDropActive.value = false
   closeSearch()
   closeFind()
 }
 
 function updateEditorSettings() {
-  saveEditorSettings(editorSettings.value)
+  persistEditorSettings(editorSettings.value)
+}
+
+function persistEditorSettings(settings: EditorSettings): boolean {
+  try {
+    saveEditorSettings(settings)
+    editorSettings.value = settings
+    return true
+  } catch (error) {
+    showOperationError(error instanceof Error ? error.message : '设置保存失败，请重试')
+    return false
+  }
+}
+
+function selectTheme(themeId: string) {
+  persistEditorSettings({ ...editorSettings.value, themeId })
+}
+
+function saveCustomTheme(theme: ColorTheme) {
+  const customThemes = editorSettings.value.customThemes.filter((item) => item.id !== theme.id)
+  return persistEditorSettings({ ...editorSettings.value, themeId: theme.id, customThemes: [...customThemes, theme] })
+}
+
+function deleteCustomTheme(themeId: string) {
+  return persistEditorSettings({
+    ...editorSettings.value,
+    themeId: editorSettings.value.themeId === themeId ? 'blue' : editorSettings.value.themeId,
+    customThemes: editorSettings.value.customThemes.filter((item) => item.id !== themeId),
+  })
 }
 
 function resetDefaultSettings() {
-  editorSettings.value = { ...defaultEditorSettings }
-  saveEditorSettings(editorSettings.value)
+  themeSettingsPanel.value?.cancelPreview()
+  themePreview.value = null
+  if (!persistEditorSettings({ ...defaultEditorSettings, customThemes: editorSettings.value.customThemes })) return
   globalNoteSearchEnabled.value = false
   saveGlobalNoteSearchEnabled(false)
   globalWorkspaceSearchEnabled.value = false
@@ -635,6 +753,7 @@ function canDiscardChanges() {
 }
 
 onMounted(async () => {
+  systemDarkTheme.addEventListener('change', updateSystemTheme)
   window.addEventListener('keydown', handleShortcut, true)
   window.addEventListener('click', closeEntryMenu)
   if (!hasRuntime.value) {
@@ -674,7 +793,7 @@ onMounted(async () => {
 
   try {
     editorMode.value = loadEditorMode()
-    editorSettings.value = loadEditorSettings()
+    editorSettings.value = loadEditorSettings(isSystemDark.value)
     globalNoteSearchEnabled.value = loadGlobalNoteSearchEnabled()
     globalWorkspaceSearchEnabled.value = loadGlobalWorkspaceSearchEnabled()
     registeredWorkspaces.value = loadRegisteredWorkspaces()
@@ -714,6 +833,11 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  systemDarkTheme.removeEventListener('change', updateSystemTheme)
+  delete document.documentElement.dataset.backgroundTheme
+  delete document.documentElement.dataset.customTheme
+  delete document.documentElement.dataset.colorScheme
+  Object.keys(themeCssVariables.value).forEach((name) => document.documentElement.style.removeProperty(name))
   window.removeEventListener('keydown', handleShortcut, true)
   window.removeEventListener('click', closeEntryMenu)
   window.clearTimeout(operationTimer)
@@ -732,6 +856,7 @@ watch(globalFeatureSignature, () => {
 function closeEntryMenu(event?: MouseEvent) {
   openEntryMenuPath.value = null
   isCreateMenuOpen.value = false
+  isEditorMenuOpen.value = false
   if (!(event?.target instanceof HTMLElement) || !event.target.closest('.search-results')) closeSearch()
 }
 
@@ -829,6 +954,7 @@ function cancelCreate() {
 }
 
 function handleShortcut(event: KeyboardEvent) {
+  if (themeSettingsPanel.value?.handleShortcut(event)) return
   const eventTarget = event.target instanceof HTMLElement ? event.target : null
   const isEditing = Boolean(eventTarget?.closest('input, textarea, [contenteditable="true"]'))
   if (event.ctrlKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'f' && activeNotePath.value) {
@@ -938,9 +1064,10 @@ function handleShortcut(event: KeyboardEvent) {
     isOutlineOpen.value = false
     return
   }
-  if (event.key === 'Escape' && (openEntryMenuPath.value || isCreateMenuOpen.value)) {
+  if (event.key === 'Escape' && (openEntryMenuPath.value || isCreateMenuOpen.value || isEditorMenuOpen.value)) {
     openEntryMenuPath.value = null
     isCreateMenuOpen.value = false
+    isEditorMenuOpen.value = false
     return
   }
   if (event.key === 'Escape') {
@@ -971,6 +1098,55 @@ function handleShortcut(event: KeyboardEvent) {
 function setEditorMode(mode: 'ir' | 'sv') {
   editorMode.value = mode
   if (hasRuntime.value) saveEditorMode(mode)
+}
+
+function downloadCurrentNote(content: string, extension: 'md' | 'html', mimeType: string) {
+  if (!activeNotePath.value) return
+  const fileName = activeNotePath.value.split('/').at(-1)?.replace(/\.md$/i, '') || '笔记'
+  const url = URL.createObjectURL(new Blob([content], { type: `${mimeType};charset=utf-8` }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `${fileName}.${extension}`
+  link.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+function exportMarkdown() {
+  isEditorMenuOpen.value = false
+  downloadCurrentNote(editorContent.value, 'md', 'text/markdown')
+  showOperationSuccess('已导出 Markdown')
+}
+
+function escapeHtml(value: string) {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;')
+}
+
+function exportHtml() {
+  isEditorMenuOpen.value = false
+  const title = activeNotePath.value?.split('/').at(-1)?.replace(/\.md$/i, '') || '笔记'
+  const body = markdownEditor.value?.getHtml() || `<pre>${escapeHtml(editorContent.value)}</pre>`
+  const html = `<!doctype html>\n<html lang="zh-CN">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>${escapeHtml(title)}</title>\n<style>body{max-width:920px;margin:0 auto;padding:40px 24px;color:#172033;font:16px/1.7 system-ui,sans-serif}img{max-width:100%;height:auto}pre,code{font-family:ui-monospace,monospace}pre{overflow:auto;padding:16px;background:#f6f8fa;border-radius:8px}table{width:100%;border-collapse:collapse}th,td{padding:8px;border:1px solid #d0d7de}blockquote{margin-left:0;padding-left:16px;border-left:4px solid #d0d7de;color:#57606a}</style>\n</head>\n<body>${body}</body>\n</html>\n`
+  downloadCurrentNote(html, 'html', 'text/html')
+  showOperationSuccess('已导出 HTML')
+}
+
+function requestMarkdownImport() {
+  isEditorMenuOpen.value = false
+  markdownImportInput.value?.click()
+}
+
+async function importMarkdown(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  if (!window.confirm(`导入“${file.name}”将替换当前笔记内容，是否继续？`)) return
+  try {
+    editorContent.value = await file.text()
+    showOperationSuccess(`已导入 ${file.name}，正在自动保存`)
+  } catch (error) {
+    showOperationError(error instanceof Error ? error.message : 'Markdown 导入失败')
+  }
 }
 
 function selectOutlineHeading(headingIndex: number) {
@@ -1059,6 +1235,7 @@ async function submitRename() {
   try {
     const root = workspace.value.workspace.path
     const newPath = await window.znotes.renameEntry(root, oldPath, renameName.value)
+    replaceTreeOrderPath(oldPath, newPath)
     replacePinnedPath(oldPath, newPath)
     replaceHiddenGlobalPath(oldPath, newPath)
     replaceNoteDraftPath(workspace.value.workspace.id, oldPath, newPath)
@@ -1782,6 +1959,10 @@ function scheduleAutoSave() {
 
 watch(editorContent, scheduleAutoSave)
 watch(searchQuery, scheduleSearch)
+watch(workspace, (current, previous) => {
+  if (current?.workspace.id !== previous?.workspace.id) treeOrderError.value = ''
+  reloadTreeOrder()
+})
 watch(workspace, (currentWorkspace) => {
   if (!currentWorkspace) {
     pinnedNotePaths.value = []
@@ -1923,9 +2104,13 @@ watch(activeNotePath, () => {
               <button type="button" class="pinned-note-remove" aria-label="取消置顶" title="取消置顶" @click="togglePinnedNote(note)">×</button>
             </div>
           </section>
+          <div v-if="treeOrderError" class="tree-order-error" role="alert">
+            <span>{{ treeOrderError }}</span>
+            <button type="button" aria-label="关闭排序错误提示" @click="treeOrderError = ''">×</button>
+          </div>
           <WorkspaceTree
             v-if="workspace.entries.length"
-            :entries="workspace.entries"
+            :entries="orderedTreeEntries"
             :active-path="activeNotePath"
             :selected-path="selectedEntry?.relativePath ?? ''"
             :create-parent-path="selectedDirectory"
@@ -1954,6 +2139,7 @@ watch(activeNotePath, () => {
             @cancel-rename="cancelRename"
             @toggle-menu="openEntryMenuPath = $event"
             @request-move="moveEntry"
+            @request-reorder="reorderEntry"
             @show-in-folder="showEntryInFolder"
           />
           <p v-else class="muted">工作区中还没有 Markdown 笔记。</p>
@@ -1983,16 +2169,41 @@ watch(activeNotePath, () => {
               >
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h2M4 12h2M4 18h2M10 6h10M10 12h10M10 18h10" /></svg>
               </button>
-              <select :value="editorMode" aria-label="编辑模式" @change="setEditorMode(($event.target as HTMLSelectElement).value as 'ir' | 'sv')">
-                <option value="ir">即时渲染</option>
-                <option value="sv">Markdown 源码</option>
-              </select>
+              <div class="editor-more-menu" @click.stop>
+                <button
+                  type="button"
+                  class="editor-more-trigger"
+                  aria-label="更多编辑器操作"
+                  title="更多"
+                  :aria-expanded="isEditorMenuOpen"
+                  @click="isEditorMenuOpen = !isEditorMenuOpen"
+                >⋮</button>
+                <div v-if="isEditorMenuOpen" class="editor-more-popover">
+                  <button type="button" @click="setEditorMode(editorMode === 'ir' ? 'sv' : 'ir'); isEditorMenuOpen = false">
+                    <span class="menu-check">{{ editorMode === 'ir' ? '✓' : '' }}</span>
+                    即时渲染
+                  </button>
+                  <span class="editor-menu-divider" />
+                  <button type="button" @click="requestMarkdownImport">导入 Markdown…</button>
+                  <button type="button" @click="exportMarkdown">导出 Markdown</button>
+                  <button type="button" @click="exportHtml">导出为 HTML</button>
+                </div>
+              </div>
+              <input
+                ref="markdownImportInput"
+                class="visually-hidden"
+                type="file"
+                accept=".md,.markdown,.txt,text/markdown,text/plain"
+                tabindex="-1"
+                @change="importMarkdown"
+              />
             </div>
           </header>
           <MarkdownEditor
             ref="markdownEditor"
             v-model="editorContent"
             :mode="editorMode"
+            :dark-theme="isDarkTheme"
             :disabled="isReadingNote"
             :workspace-path="workspace.workspace.path"
             :note-path="activeNotePath"
@@ -2159,10 +2370,20 @@ watch(activeNotePath, () => {
             </div>
           </section>
           <section class="settings-group">
-            <header class="settings-group-title"><h3>编辑器</h3><small>调整正文显示和当前笔记查找效果。</small></header>
+            <header class="settings-group-title"><h3>外观与编辑器</h3><small>颜色随主题保存；字号、行高和高亮透明度切换主题时保持不变。</small></header>
+            <ThemeSettings
+              ref="themeSettingsPanel"
+              :active-theme="activeTheme"
+              :custom-themes="editorSettings.customThemes"
+              :system-dark="isSystemDark"
+              @select="selectTheme"
+              :save-theme="saveCustomTheme"
+              :delete-theme="deleteCustomTheme"
+              @preview="themePreview = $event"
+            />
             <label>正文字号 <input v-model.number="editorSettings.fontSize" type="range" min="12" max="24" step="1" @input="updateEditorSettings" /><span>{{ editorSettings.fontSize }} px</span></label>
             <label>正文行高 <input v-model.number="editorSettings.lineHeight" type="range" min="1.2" max="2.4" step="0.1" @input="updateEditorSettings" /><span>{{ editorSettings.lineHeight.toFixed(1) }}</span></label>
-            <label>查找匹配颜色 <input v-model="editorSettings.findHighlightColor" type="color" @input="updateEditorSettings" /></label>
+            <label>文本高亮透明度 <input v-model.number="editorSettings.textHighlightOpacity" type="range" min="0" max="100" step="1" @input="updateEditorSettings" /><span>{{ editorSettings.textHighlightOpacity }}%</span></label>
           </section>
           <section class="settings-group">
             <header class="settings-group-title"><h3>zTools 集成</h3><small>控制哪些内容可以从 zTools 主搜索中直接打开。</small></header>
@@ -2197,7 +2418,7 @@ watch(activeNotePath, () => {
       <div v-if="isResetSettingsOpen" class="modal-backdrop" @click.self="isResetSettingsOpen = false">
         <section class="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="reset-settings-title">
           <h2 id="reset-settings-title">恢复默认设置？</h2>
-          <p>将重置编辑器显示、zTools 全局搜索开关和回收站保留时间。工作区、笔记、置顶和单篇隐藏状态不会改变。</p>
+          <p>将切回蓝底并重置字号、行高、高亮透明度、zTools 全局搜索开关和回收站保留时间。自定义主题、工作区、笔记、置顶和单篇隐藏状态不会改变。</p>
           <div class="confirm-actions">
             <button type="button" class="button-secondary" @click="isResetSettingsOpen = false">取消</button>
             <button type="button" @click="resetDefaultSettings">确认恢复</button>

@@ -1,15 +1,21 @@
 <script setup lang="ts">
 import type { Reminder, DaySchedule } from '../../types/reminder'
-import { WEEKDAY_LABELS, REMINDER_TYPE_LABELS } from '../../types/reminder'
+import { WEEKDAY_LABELS, REMINDER_TYPE_LABELS, DAY_FILTER_LABELS, ALIGN_MODE_LABELS } from '../../types/reminder'
 
-const props = defineProps<{
+defineProps<{
   reminder: Reminder
+  selected?: boolean
+  draggable?: boolean
 }>()
 
 const emit = defineEmits<{
   toggle: [id: string]
   edit: [reminder: Reminder]
+  copy: [reminder: Reminder]
   delete: [id: string]
+  select: [id: string]
+  dragstart: [event: DragEvent, id: string]
+  dragend: []
 }>()
 
 function formatWeekdays(days: number[]): string {
@@ -31,6 +37,8 @@ interface TimeGroup {
 function groupByTime(schedules: DaySchedule[]): TimeGroup[] {
   if (schedules.length === 0) return []
   const sorted = [...schedules].sort((a, b) => a.weekday - b.weekday)
+  // 全部星期集合：某组覆盖了全部已选星期时，不再重复显示星期前缀（如全选时就是"每天"）
+  const allDays = [...new Set(sorted.map(s => s.weekday))].sort((a, b) => a - b)
   const map = new Map<string, number[]>()
   for (const s of sorted) {
     const key = `${s.startTime}-${s.endTime}`
@@ -39,8 +47,10 @@ function groupByTime(schedules: DaySchedule[]): TimeGroup[] {
   }
   const groups: TimeGroup[] = []
   for (const [time, weekdays] of map) {
+    const ws = weekdays.sort((a, b) => a - b)
+    const coversAll = ws.length === allDays.length && ws.every((w, i) => w === allDays[i])
     groups.push({
-      days: weekdays.sort((a, b) => a - b).map(w => WEEKDAY_LABELS[w]).join('、'),
+      days: coversAll ? '' : ws.map(w => WEEKDAY_LABELS[w]).join('、'),
       time
     })
   }
@@ -63,23 +73,45 @@ function isOncePast(timestamp: number): boolean {
 
 <template>
   <div :class="['reminder-item', { disabled: !reminder.enabled }]">
+    <span
+      v-if="draggable"
+      class="drag-handle"
+      draggable="true"
+      title="拖拽排序 / 拖到分组"
+      @click.stop
+      @dragstart="emit('dragstart', $event, reminder.id)"
+      @dragend="emit('dragend')"
+    >
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+        <circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/>
+        <circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/>
+        <circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/>
+      </svg>
+    </span>
+    <label class="item-check" @click.stop>
+      <input
+        type="checkbox"
+        :checked="selected"
+        @change="emit('select', reminder.id)"
+      />
+    </label>
     <div class="item-main">
       <div class="item-header">
-        <span class="item-title">{{ reminder.title }}</span>
-        <div class="item-toggle">
-          <label class="switch">
-            <input
-              type="checkbox"
-              :checked="reminder.enabled"
-              @change="emit('toggle', reminder.id)"
-            />
-            <span class="slider"></span>
-          </label>
+        <div class="item-title-row">
+          <span class="item-title">{{ reminder.title }}</span>
+          <span class="item-desc" v-if="reminder.content">{{ reminder.content }}</span>
         </div>
       </div>
-      <div class="item-desc" v-if="reminder.content">{{ reminder.content }}</div>
       <div class="item-meta">
         <span class="tag tag-type">{{ REMINDER_TYPE_LABELS[reminder.type] }}</span>
+
+        <!-- 触发日过滤标签 -->
+        <span
+          v-if="reminder.type !== 'once' && reminder.dayFilter && reminder.dayFilter !== 'all'"
+          class="tag tag-dayfilter"
+        >
+          {{ DAY_FILTER_LABELS[reminder.dayFilter] }}
+        </span>
 
         <!-- once 类型 -->
         <template v-if="reminder.type === 'once'">
@@ -103,14 +135,29 @@ function isOncePast(timestamp: number): boolean {
           </template>
           <template v-else>
             <span v-for="(g, i) in groupByTime(reminder.schedules)" :key="i" class="tag tag-group">
-              {{ g.days }} {{ g.time }}
+              {{ g.days ? g.days + ' ' : '' }}{{ g.time }}
             </span>
           </template>
           <span class="tag">每{{ formatInterval(reminder.interval) }}</span>
+          <span v-if="reminder.align === 'create'" class="tag tag-align-create">{{ ALIGN_MODE_LABELS.create }}</span>
         </template>
       </div>
     </div>
     <div class="item-actions">
+      <label class="switch" title="启用/停用">
+        <input
+          type="checkbox"
+          :checked="reminder.enabled"
+          @change="emit('toggle', reminder.id)"
+        />
+        <span class="slider"></span>
+      </label>
+      <button class="action-btn" @click="emit('copy', reminder)" title="复制">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+      </button>
       <button class="action-btn" @click="emit('edit', reminder)" title="编辑">
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -149,6 +196,34 @@ function isOncePast(timestamp: number): boolean {
   opacity: 0.5;
 }
 
+.item-check {
+  display: flex;
+  align-items: center;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.drag-handle {
+  display: flex;
+  align-items: center;
+  margin-right: 6px;
+  flex-shrink: 0;
+  color: var(--el-text-color-placeholder);
+  cursor: grab;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.item-check input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--el-color-primary);
+  cursor: pointer;
+}
+
 .item-main {
   flex: 1;
   min-width: 0;
@@ -157,8 +232,15 @@ function isOncePast(timestamp: number): boolean {
 .item-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   margin-bottom: 4px;
+}
+
+.item-title-row {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .item-title {
@@ -168,15 +250,18 @@ function isOncePast(timestamp: number): boolean {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex-shrink: 0;
+  max-width: 60%;
 }
 
 .item-desc {
   font-size: 12px;
   color: var(--el-text-color-secondary);
-  margin-bottom: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
 .item-meta {
@@ -202,9 +287,19 @@ function isOncePast(timestamp: number): boolean {
   color: var(--el-color-warning);
 }
 
+.tag-dayfilter {
+  background: var(--el-color-success-light-9);
+  color: var(--el-color-success);
+}
+
 .tag-group {
   background: var(--el-color-primary-light-9);
   color: var(--el-color-primary);
+}
+
+.tag-align-create {
+  background: var(--el-color-info-light-9);
+  color: var(--el-color-info);
 }
 
 .tag-past {
@@ -214,6 +309,7 @@ function isOncePast(timestamp: number): boolean {
 
 .item-actions {
   display: flex;
+  align-items: center;
   gap: 4px;
   margin-left: 12px;
   flex-shrink: 0;
@@ -251,6 +347,8 @@ function isOncePast(timestamp: number): boolean {
   display: inline-block;
   width: 36px;
   height: 20px;
+  margin-right: 6px;
+  flex-shrink: 0;
 }
 
 .switch input {

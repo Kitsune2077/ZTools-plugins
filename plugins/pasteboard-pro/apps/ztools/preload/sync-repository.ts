@@ -1,5 +1,4 @@
-import { createHash } from "node:crypto";
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -15,6 +14,12 @@ import {
   type ZToolsDocumentDatabase,
 } from "./clipboard-store";
 import { ZToolsPinboardStore } from "./pinboard-store";
+import {
+  deleteManagedSyncBlobFile,
+  MAX_SYNC_BLOB_BYTES,
+  readBoundedImageBytes,
+  writeVerifiedSyncBlobFile,
+} from "./sync-blob-files";
 import type { SyncBlob, SyncEntity, SyncEntityRepository } from "./sync-runtime";
 import {
   ZToolsWindowPreferencesStore,
@@ -22,37 +27,17 @@ import {
 } from "./window-preferences";
 
 const TOMBSTONE_PREFIX = "pasteboard-pro:tombstone:";
-const MAX_BLOB_BYTES = 100 * 1_024 * 1_024;
-
-function blobExtension(mediaType: string): string {
-  return (
-    {
-      "image/png": "png",
-      "image/jpeg": "jpg",
-      "image/webp": "webp",
-      "image/tiff": "tiff",
-      "application/pdf": "pdf",
-      "text/rtf": "rtf",
-      "text/rtfd": "rtfd",
-    } as Readonly<Record<string, string>>
-  )[mediaType] ?? "bin";
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-async function existingFile(filePath: string): Promise<boolean> {
-  try {
-    return (await stat(filePath)).isFile();
-  } catch (error) {
-    if (isRecord(error) && error.code === "ENOENT") return false;
-    throw error;
-  }
-}
-
 function databaseStatus(error: unknown, status: number): boolean {
   return isRecord(error) && (error.status === status || error.statusCode === status);
+}
+
+function missingFile(error: unknown): boolean {
+  return isRecord(error) && error.code === "ENOENT";
 }
 
 function revision(value: unknown): string | undefined {
@@ -106,6 +91,8 @@ export class ZToolsSyncEntityRepository implements SyncEntityRepository {
       "ztools",
       "blobs",
     ),
+    private readonly legacyBlobRoots: readonly string[] = [],
+    private readonly ready: Promise<void> = Promise.resolve(),
   ) {
     this.clipboard = new ZToolsCanonicalClipboardStore(database, { deviceId });
     this.pinboards = new ZToolsPinboardStore(database, { deviceId });
@@ -130,6 +117,7 @@ export class ZToolsSyncEntityRepository implements SyncEntityRepository {
   }
 
   async listEntities(): Promise<SyncEntity[]> {
+    await this.ready;
     const preferences = await this.preferences.getSyncEntity();
     const entities: SyncEntity[] = [
       ...(await this.clipboard.listRecords()).map((record) => record.item),
@@ -196,6 +184,7 @@ export class ZToolsSyncEntityRepository implements SyncEntityRepository {
   }
 
   async applyEntities(entities: readonly SyncEntity[]): Promise<void> {
+    await this.ready;
     for (const entity of entities) {
       if ("deleted" in entity) {
         if (entity.entityType === "paste_item") {
@@ -217,6 +206,7 @@ export class ZToolsSyncEntityRepository implements SyncEntityRepository {
   }
 
   async readBlob(blobId: string): Promise<SyncBlob | undefined> {
+    await this.ready;
     const record = (await this.clipboard.listRecords()).find(
       (candidate) => candidate.item.payload.blobId === blobId,
     );
@@ -225,14 +215,14 @@ export class ZToolsSyncEntityRepository implements SyncEntityRepository {
     if (imagePath === undefined) return undefined;
     let bytes: Buffer;
     try {
-      bytes = await readFile(imagePath);
+      bytes = await readBoundedImageBytes(imagePath);
     } catch (error) {
       if (databaseStatus(error, 404) || (isRecord(error) && error.code === "ENOENT")) {
         return undefined;
       }
       throw error;
     }
-    if (bytes.byteLength > MAX_BLOB_BYTES) {
+    if (bytes.byteLength > MAX_SYNC_BLOB_BYTES) {
       throw new RangeError(`Blob ${blobId} exceeds 100 MiB`);
     }
     return {
@@ -246,37 +236,57 @@ export class ZToolsSyncEntityRepository implements SyncEntityRepository {
     bytes: Uint8Array,
     mediaType: string,
   ): Promise<Readonly<{ id: string; imagePath: string; blobBytes: number }>> {
-    if (bytes.byteLength > MAX_BLOB_BYTES) {
+    await this.ready;
+    if (bytes.byteLength > MAX_SYNC_BLOB_BYTES) {
       throw new RangeError("Blob exceeds 100 MiB");
     }
-    const digest = createHash("sha256").update(bytes).digest("hex");
-    const imagePath = await this.writeBlobBytes(bytes, mediaType, digest);
+    const stored = await writeVerifiedSyncBlobFile(this.blobRoot, bytes, mediaType);
     return {
-      id: `blob-${digest}`,
-      imagePath,
-      blobBytes: bytes.byteLength,
+      id: `blob-${stored.digest}`,
+      imagePath: stored.filePath,
+      blobBytes: stored.byteLength,
     };
   }
 
   async deleteLocalBlob(input: Readonly<{ blobId: string; filePath: string }>): Promise<void> {
-    if (input.blobId.length === 0) {
-      throw new TypeError("Blob id must be non-empty");
-    }
-    const root = path.resolve(this.blobRoot);
-    const filePath = path.resolve(input.filePath);
-    const relative = path.relative(root, filePath);
-    if (relative.length === 0 || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
-      throw new TypeError("Refusing to delete a blob outside the plugin blob directory");
-    }
-    await rm(filePath, { force: true });
+    await this.ready;
+    await deleteManagedSyncBlobFile(
+      input,
+      [this.blobRoot, ...this.legacyBlobRoots],
+      async (canonicalFile, blobId) => {
+        const remainingRecords = await this.clipboard.listRecords();
+        for (const record of remainingRecords) {
+          const recordPath = record.origin.imagePath;
+          if (recordPath === undefined) continue;
+          let canonicalRecordPath: string;
+          try {
+            canonicalRecordPath = await realpath(recordPath);
+          } catch (error) {
+            if (missingFile(error)) continue;
+            throw error;
+          }
+          if (
+            canonicalRecordPath === canonicalFile ||
+            record.origin.pluginBlobId === blobId
+          ) {
+            return true;
+          }
+        }
+        return false;
+      },
+    );
   }
 
   async writeBlob(blob: SyncBlob): Promise<void> {
-    if (blob.bytes.byteLength > MAX_BLOB_BYTES) {
+    await this.ready;
+    if (blob.bytes.byteLength > MAX_SYNC_BLOB_BYTES) {
       throw new RangeError(`Blob ${blob.id} exceeds 100 MiB`);
     }
-    const digest = createHash("sha256").update(blob.bytes).digest("hex");
-    const destination = await this.writeBlobBytes(blob.bytes, blob.mediaType, digest);
+    const stored = await writeVerifiedSyncBlobFile(
+      this.blobRoot,
+      blob.bytes,
+      blob.mediaType,
+    );
     const records = await this.clipboard.listRecords();
     await Promise.all(
       records
@@ -285,34 +295,10 @@ export class ZToolsSyncEntityRepository implements SyncEntityRepository {
           this.clipboard.attachSyncedBlob(
             record.item.id,
             blob.id,
-            destination,
-            blob.bytes.byteLength,
+            stored.filePath,
+            stored.byteLength,
           ),
         ),
     );
-  }
-
-  private async writeBlobBytes(
-    bytes: Uint8Array,
-    mediaType: string,
-    digest: string,
-  ): Promise<string> {
-    const directory = path.join(this.blobRoot, digest.slice(0, 2));
-    const destination = path.join(
-      directory,
-      `${digest}.${blobExtension(mediaType)}`,
-    );
-    if (await existingFile(destination)) return destination;
-    await mkdir(directory, { recursive: true });
-    const temporary = `${destination}.tmp-${process.pid}-${Date.now()}`;
-    try {
-      await writeFile(temporary, bytes, { flag: "wx" });
-      await rename(temporary, destination);
-    } catch (error) {
-      await rm(temporary, { force: true });
-      if (await existingFile(destination)) return destination;
-      throw error;
-    }
-    return destination;
   }
 }
